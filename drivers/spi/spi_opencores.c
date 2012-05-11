@@ -11,16 +11,15 @@
  * published by the Free Software Foundation.
  */
 
-#include <linux/module.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
 #include <linux/platform_device.h>
 #include <linux/err.h>
 #include <linux/io.h>
-#include <asm/cpuinfo.h>
 #include <linux/spi/spi.h>
 #include <asm/unaligned.h>
+#include <asm/cpuinfo.h>
 
 #define DRIVER_NAME			"oc_spi_simple"
 
@@ -44,7 +43,7 @@
 #define OCSPI_SPSR_WCOL			(1 << 6)
 #define OCSPI_SPSR_WFFULL		(1 << 3)
 #define OCSPI_SPSR_WFEMPTY		(1 << 2)
-#define OCSPI_SPSR_RFFULL		(1 << 1)
+#define OCSPI_SPSR_RFFUL		(1 << 1)
 #define OCSPI_SPSR_RFEMPTY		(1 << 0)
 
 #define OCSPI_SPER_ICNT			0xc0
@@ -195,23 +194,6 @@ ocspi_wait_till_ready(struct ocspi *ocspi)
 
 	return -1;
 }
-
-static inline int
-ocspi_wait_till_readable(struct ocspi *ocspi)
-{
-	int i;
-
-	for (i = 0; i < OCSPI_WAIT_RDY_MAX_LOOP; i++) {
-		if (!(ocspi_read(ocspi, OCSPI_REG_SPSR) & OCSPI_SPSR_RFEMPTY))
-			return 1;
-		else
-			usleep_range(1,1);
-			//udelay(1);
-	}
-
-	return -1;
-}
-
 #if 0
 static inline int
 ocspi_write_read(struct spi_device *spi,
@@ -223,7 +205,7 @@ ocspi_write_read(struct spi_device *spi,
 	ocspi = spi_master_get_devdata(spi->master);
 
 	/* If there's any garbage left over in the read buffer, delete it */
-	while (!ocspi_read(ocspi, OCSPI_REG_SPSR) & OCSPI_SPSR_RFEMPTY) {
+	while (!ocspi_read(ocspi, OCSPI_REG_SPSR) & OCSPI_SPSR_RDEMPTY) {
 		ocspi_read(ocspi, OCSPI_REG_SPDR);
 	}
 
@@ -245,10 +227,10 @@ ocspi_write_read(struct spi_device *spi,
 		}		
 
 		if (rx_buf && *rx_buf) {
-			while (!ocspi_read(ocspi, OCSPI_REG_SPSR) & OCSPI_SPSR_RFEMPTY) {
+			while (!ocspi_read(ocspi, OCSPI_REG_SPSR) & OCSPI_SPSR_RDEMPTY) {
 				*(*rx_buf)++ = ocspi_read(ocspi, OCSPI_REG_SPDR);
 		} else {
-			while (!ocspi_read(ocspi, OCSPI_REG_SPSR) & OCSPI_SPSR_RFEMPTY) {
+			while (!ocspi_read(ocspi, OCSPI_REG_SPSR) & OCSPI_SPSR_RDEMPTY) {
 				ocspi_read(ocspi, OCSPI_REG_SPDR);
 		}
 	} while (count > 0);
@@ -273,10 +255,6 @@ ocspi_write_read_8bit(struct spi_device *spi,
 
 	if (ocspi_wait_till_ready(ocspi) < 0) {
 		dev_err(&spi->dev, "TXS timed out\n");
-		return -1;
-	}
-	if (ocspi_wait_till_readable(ocspi) < 0) {
-		dev_err(&spi->dev, "RXS timed out\n");
 		return -1;
 	}
 
@@ -474,8 +452,6 @@ static int __init ocspi_reset(struct ocspi *ocspi)
 	/* Verify that the CS is deasserted */
 	ocspi_set_cs(ocspi, 0);
 
-	/* Disable controller */
-	ocspi_write(ocspi, OCSPI_REG_SPCR, OCSPI_SPCR_MSTR);
 	/* Enable controller */
 	ocspi_write(ocspi, OCSPI_REG_SPCR, OCSPI_SPCR_SPE | OCSPI_SPCR_MSTR);
 
