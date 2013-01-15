@@ -15,6 +15,9 @@ config OPENRISC
 	select GENERIC_IRQ_PROBE
 	select GENERIC_IRQ_SHOW
 	select GENERIC_IOMAP
+	# We don't relly have these, but u-boot does so pretend.
+	select HAVE_KERNEL_LZO
+	select HAVE_KERNEL_GZIP
 
 config MMU
 	def_bool y
