@@ -674,10 +674,21 @@ static int __devexit at24_remove(struct i2c_client *client)
 
 /*-------------------------------------------------------------------------*/
 
+#ifdef CONFIG_OF
+static struct of_device_id at24_of_ids[] = {
+	{ .compatible = "atmel,24c02", },
+	{},
+};
+MODULE_DEVICE_TABLE(of, at24_of_ids);
+#else
+#define at24_of_ids NULL
+#endif
+
 static struct i2c_driver at24_driver = {
 	.driver = {
 		.name = "at24",
 		.owner = THIS_MODULE,
+		.of_match_table = at24_of_ids,
 	},
 	.probe = at24_probe,
 	.remove = __devexit_p(at24_remove),

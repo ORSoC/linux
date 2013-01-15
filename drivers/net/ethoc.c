@@ -19,9 +19,12 @@
 #include <linux/mii.h>
 #include <linux/phy.h>
 #include <linux/platform_device.h>
+#include <linux/ethtool.h>
+#include <linux/etherdevice.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/of.h>
+#include <linux/module.h>
 #include <net/ethoc.h>
 
 static int buffer_size = 0x20000; /* 128 KBytes */
@@ -216,7 +219,34 @@ struct ethoc {
 	struct phy_device *phy;
 	struct mii_bus *mdio;
 	s8 phy_id;
+
+        // -ms- ethtool support start 09.04.2012
+
+	struct mutex mulock;
+
+	struct mii_if_info mii_if;
+	u32 advertising;
+
+	int media_state;
+	int multicast;
+	int promiscuous;
+	int duplex;
+	int speed;
+	int force_link;
+	
+        // -ms- ethtool support end 09.04.2012
+
 };
+
+
+
+// -ms- ethtool support start 09.04.2012
+
+static int msg_enable;
+
+// -ms- ethtool support end 09.04.2012
+
+
 
 /**
  * struct ethoc_bd - buffer descriptor
@@ -258,6 +288,7 @@ static inline void ethoc_write_bd(struct ethoc *dev, int index,
 		const struct ethoc_bd *bd)
 {
 	loff_t offset = ETHOC_BD_BASE + (index * sizeof(struct ethoc_bd));
+        /* should reverse this order since stat is used to hand over BD to MAC */
 	ethoc_write(dev, offset + 0, bd->stat);
 	ethoc_write(dev, offset + 4, bd->addr);
 }
@@ -354,6 +385,10 @@ static int ethoc_reset(struct ethoc *dev)
 	mode |= MODER_CRC | MODER_PAD;
 	ethoc_write(dev, MODER, mode);
 
+        dev->speed=100;
+	dev->duplex=1;
+	dev->force_link=0;
+
 	/* set full-duplex mode */
 	mode = ethoc_read(dev, MODER);
 	mode |= MODER_FULLD;
@@ -392,7 +427,7 @@ static unsigned int ethoc_update_rx_stats(struct ethoc *dev,
 	if (bd->stat & RX_BD_CRC) {
 		dev_err(&netdev->dev, "RX: wrong CRC\n");
 		netdev->stats.rx_crc_errors++;
-		ret++;
+                ret++;
 	}
 
 	if (bd->stat & RX_BD_OR) {
@@ -417,6 +452,8 @@ static int ethoc_rx(struct net_device *dev, int limit)
 {
 	struct ethoc *priv = netdev_priv(dev);
 	int count;
+	//char tmp[40];
+
 
 	for (count = 0; count < limit; ++count) {
 		unsigned int entry;
@@ -424,6 +461,10 @@ static int ethoc_rx(struct net_device *dev, int limit)
 
 		entry = priv->num_tx + priv->cur_rx;
 		ethoc_read_bd(priv, entry, &bd);
+
+	        //snprintf(tmp,sizeof(tmp),"ethoc_rx: len=%d bd.stat=0x%0x\n",bd.stat >> 16,bd.stat&0xFFFF);
+		//printk(tmp);
+
 		if (bd.stat & RX_BD_EMPTY) {
 			ethoc_ack_irq(priv, INT_MASK_RX);
 			/* If packet (interrupt) came in between checking
@@ -619,10 +660,16 @@ static int ethoc_poll(struct napi_struct *napi, int budget)
 	return rx_work_done;
 }
 
+
+
 static int ethoc_mdio_read(struct mii_bus *bus, int phy, int reg)
 {
 	struct ethoc *priv = bus->priv;
 	int i;
+	//char tmp[80];
+
+        //snprintf(tmp,sizeof(tmp),"ethoc_mdio_read(phy=%d,reg=%d\n",phy,reg);
+        //printk(tmp);
 
 	ethoc_write(priv, MIIADDRESS, MIIADDRESS_ADDR(phy, reg));
 	ethoc_write(priv, MIICOMMAND, MIICOMMAND_READ);
@@ -633,11 +680,13 @@ static int ethoc_mdio_read(struct mii_bus *bus, int phy, int reg)
 			u32 data = ethoc_read(priv, MIIRX_DATA);
 			/* reset MII command register */
 			ethoc_write(priv, MIICOMMAND, 0);
+                        //printk("ethoc_mdio_read: return data\n");
 			return data;
 		}
 		usleep_range(100,200);
 	}
 
+        //printk("ethoc_mdio_read: Exit EBUSY\n");
 	return -EBUSY;
 }
 
@@ -645,6 +694,10 @@ static int ethoc_mdio_write(struct mii_bus *bus, int phy, int reg, u16 val)
 {
 	struct ethoc *priv = bus->priv;
 	int i;
+	//char tmp[80];
+
+        //snprintf(tmp,sizeof(tmp),"ethoc_mdio_write(phy=%d,reg=%d,val=0x%0x\n",phy,reg,val);
+        //printk(tmp);
 
 	ethoc_write(priv, MIIADDRESS, MIIADDRESS_ADDR(phy, reg));
 	ethoc_write(priv, MIITX_DATA, val);
@@ -655,22 +708,28 @@ static int ethoc_mdio_write(struct mii_bus *bus, int phy, int reg, u16 val)
 		if (!(stat & MIISTATUS_BUSY)) {
 			/* reset MII command register */
 			ethoc_write(priv, MIICOMMAND, 0);
+                        //printk("ethoc_mdio_write: Exit 0\n");
 			return 0;
 		}
 		usleep_range(100,200);
 	}
 
+        //printk("ethoc_mdio_write: Exit EBUSY\n");
 	return -EBUSY;
 }
 
 static int ethoc_mdio_reset(struct mii_bus *bus)
 {
+        //printk("ethoc_mdio_reset: DUMMY\n");
 	return 0;
 }
 
+
 static void ethoc_mdio_poll(struct net_device *dev)
 {
+        //printk("ethoc_mdio_poll: DUMMY\n");
 }
+
 
 static int __devinit ethoc_mdio_probe(struct net_device *dev)
 {
@@ -689,6 +748,11 @@ static int __devinit ethoc_mdio_probe(struct net_device *dev)
 		return -ENXIO;
 	}
 
+        /* YV prevent autoneg on fiber */
+        phy->autoneg = AUTONEG_DISABLE;
+        phy->speed = SPEED_100;
+        phy->duplex = DUPLEX_FULL;
+
 	err = phy_connect_direct(dev, phy, ethoc_mdio_poll, 0,
 			PHY_INTERFACE_MODE_GMII);
 	if (err) {
@@ -700,15 +764,43 @@ static int __devinit ethoc_mdio_probe(struct net_device *dev)
 	return 0;
 }
 
+
+
+static int ethoc_set_mac_address(struct net_device *dev, struct sockaddr *addr)
+{
+	struct ethoc *priv = netdev_priv(dev);
+	u8 *mac = (u8 *)addr->sa_data;
+	//char tmp[40];
+
+        //snprintf(tmp,sizeof(tmp),"set_mac_address(%02x:%02x:%02x:%02x:%02x:%02x)\n", 
+        //                           mac[0],mac[1],mac[2],
+        //                           mac[3],mac[4],mac[5]);
+	//printk(tmp);
+        
+
+	memcpy(dev->dev_addr, mac, IFHWADDRLEN);
+
+	ethoc_write(priv, MAC_ADDR0, (mac[2] << 24) | (mac[3] << 16) |
+				     (mac[4] <<  8) | (mac[5] <<  0));
+	ethoc_write(priv, MAC_ADDR1, (mac[0] <<  8) | (mac[1] <<  0));
+
+	return 0;
+}
+
+
 static int ethoc_open(struct net_device *dev)
 {
 	struct ethoc *priv = netdev_priv(dev);
 	int ret;
+	//char tmp[40];
 
 	ret = request_irq(dev->irq, ethoc_interrupt, IRQF_SHARED,
 			dev->name, dev);
 	if (ret)
 		return ret;
+        
+        //snprintf(tmp,sizeof(tmp),"ethoc_open: request_irq=%d\n",ret);
+	//printk(tmp);
 
 	ethoc_init_ring(priv, dev->mem_start);
 	ethoc_reset(priv);
@@ -756,19 +848,35 @@ static int ethoc_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	struct mii_ioctl_data *mdio = if_mii(ifr);
 	struct phy_device *phy = NULL;
 
-	if (!netif_running(dev))
+        //static char str[40];
+        //snprintf(str,128,"*****ethoc_ioctl: cmd=%x\n",cmd);
+        //printk(str);
+
+	if (!netif_running(dev)) {
+		//printk("ethoc_ioctl: EINVAL\n");
 		return -EINVAL;
+	}
+
+
+	if (cmd == SIOCGIFHWADDR) {
+	   return ethoc_get_mac_address(dev, ifr->ifr_hwaddr.sa_data);	
+	}
 
 	if (cmd != SIOCGMIIPHY) {
-		if (mdio->phy_id >= PHY_MAX_ADDR)
+		if (mdio->phy_id >= PHY_MAX_ADDR) {
+			//printk("ethoc_ioctl: ERANGE\n");
 			return -ERANGE;
+		}
 
 		phy = priv->mdio->phy_map[mdio->phy_id];
-		if (!phy)
+		if (!phy) {
+			//printk("ethoc_ioctl: ENODEV\n");
 			return -ENODEV;
+		}
 	} else {
 		phy = priv->phy;
 	}
+
 
 	return phy_mii_ioctl(phy, ifr, cmd);
 }
@@ -778,24 +886,18 @@ static int ethoc_config(struct net_device *dev, struct ifmap *map)
 	return -ENOSYS;
 }
 
-static int ethoc_set_mac_address(struct net_device *dev, void *addr)
-{
-	struct ethoc *priv = netdev_priv(dev);
-	u8 *mac = (u8 *)addr;
-
-	ethoc_write(priv, MAC_ADDR0, (mac[2] << 24) | (mac[3] << 16) |
-				     (mac[4] <<  8) | (mac[5] <<  0));
-	ethoc_write(priv, MAC_ADDR1, (mac[0] <<  8) | (mac[1] <<  0));
-
-	return 0;
-}
-
 static void ethoc_set_multicast_list(struct net_device *dev)
 {
 	struct ethoc *priv = netdev_priv(dev);
 	u32 mode = ethoc_read(priv, MODER);
 	struct netdev_hw_addr *ha;
 	u32 hash[2] = { 0, 0 };
+
+
+        //char tmp[40];
+
+	//snprintf(tmp,sizeof(tmp),"set_multicast_list: inmode=0x%0x\n",mode);
+	//printk(tmp);
 
 	/* set loopback mode if requested */
 	if (dev->flags & IFF_LOOPBACK)
@@ -814,6 +916,9 @@ static void ethoc_set_multicast_list(struct net_device *dev)
 		mode |=  MODER_PRO;
 	else
 		mode &= ~MODER_PRO;
+
+	//snprintf(tmp,sizeof(tmp),"set_multicast_list: setmode=0x%0x\n",mode);
+	//printk(tmp);
 
 	ethoc_write(priv, MODER, mode);
 
@@ -846,6 +951,7 @@ static void ethoc_tx_timeout(struct net_device *dev)
 		ethoc_interrupt(dev->irq, dev);
 }
 
+
 static netdev_tx_t ethoc_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ethoc *priv = netdev_priv(dev);
@@ -863,6 +969,7 @@ static netdev_tx_t ethoc_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	priv->cur_tx++;
 
 	ethoc_read_bd(priv, entry, &bd);
+        /* Unnecessary test - PAD flag does no harm if packet is large enough */
 	if (unlikely(skb->len < ETHOC_ZLEN))
 		bd.stat |=  TX_BD_PAD;
 	else
@@ -875,6 +982,7 @@ static netdev_tx_t ethoc_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	bd.stat |= TX_BD_LEN(skb->len);
 	ethoc_write_bd(priv, entry, &bd);
 
+        /* unnecessary two step write - READY should already be cleared given a free bd */
 	bd.stat |= TX_BD_READY;
 	ethoc_write_bd(priv, entry, &bd);
 
@@ -889,6 +997,193 @@ out:
 	dev_kfree_skb(skb);
 	return NETDEV_TX_OK;
 }
+
+
+
+// -ms- ethtool support start 09.04.2012
+
+/*
+ * ethtool support
+ */
+
+
+#define ADVERTISED_ALL			\
+	(ADVERTISED_10baseT_Half |	\
+	ADVERTISED_10baseT_Full |	\
+	ADVERTISED_100baseT_Half |	\
+	ADVERTISED_100baseT_Full)
+
+/* These functions use the MII functions in mii.c. */
+
+
+static int ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *cmd)
+{
+	struct ethoc *priv = netdev_priv(dev);
+
+	mutex_lock(&priv->mulock);
+	mii_ethtool_gset(&priv->mii_if, cmd);
+	//cmd->advertising |= SUPPORTED_TP;
+	mutex_unlock(&priv->mulock);
+
+	/* Save advertised settings for workaround in next function. */
+	//priv->advertising = cmd->advertising;
+	return 0;
+}
+
+
+
+static int ethtool_set_settings(struct net_device *dev, struct ethtool_cmd *cmd)
+{
+	struct ethoc *priv = netdev_priv(dev);
+	u32 speed = ethtool_cmd_speed(cmd);
+	int rc;
+
+	/*
+	 * ethtool utility does not change advertised setting if auto
+	 * negotiation is not specified explicitly.
+	 */
+/*
+	if (cmd->autoneg && priv->advertising == cmd->advertising) {
+		cmd->advertising |= ADVERTISED_ALL;
+		if (10 == speed)
+			cmd->advertising &=
+				~(ADVERTISED_100baseT_Full |
+				ADVERTISED_100baseT_Half);
+		else if (100 == speed)
+			cmd->advertising &=
+				~(ADVERTISED_10baseT_Full |
+				ADVERTISED_10baseT_Half);
+		if (0 == cmd->duplex)
+			cmd->advertising &=
+				~(ADVERTISED_100baseT_Full |
+				ADVERTISED_10baseT_Full);
+		else if (1 == cmd->duplex)
+			cmd->advertising &=
+				~(ADVERTISED_100baseT_Half |
+				ADVERTISED_10baseT_Half);
+	}
+*/
+	mutex_lock(&priv->mulock);
+/*
+	if (cmd->autoneg &&
+			(cmd->advertising & ADVERTISED_ALL) ==
+			ADVERTISED_ALL) {
+		priv->duplex = 0;
+		priv->speed = 0;
+		priv->force_link = 0;
+	} else {
+		priv->duplex = cmd->duplex;
+		if (1000 != speed)
+			priv->speed = speed;
+		if (cmd->autoneg)
+			priv->force_link = 0;
+		else
+			priv->force_link = 1;
+	}
+*/
+	rc = mii_ethtool_sset(&priv->mii_if, cmd);
+	mutex_unlock(&priv->mulock);
+	return rc;
+}
+
+
+static int ethtool_nway_reset(struct net_device *dev)
+{
+	struct ethoc *priv = netdev_priv(dev);
+	int rc;
+
+	mutex_lock(&priv->mulock);
+	rc = mii_nway_restart(&priv->mii_if);
+	mutex_unlock(&priv->mulock);
+	return rc;
+}
+
+
+static u32 ethtool_get_link(struct net_device *dev)
+{
+	struct ethoc *priv = netdev_priv(dev);
+	int rc;
+	//char tmp[80];
+        
+	rc = mii_link_ok(&priv->mii_if);
+
+        //snprintf(tmp,sizeof(tmp),"ethtool_get_link: rc=%lu\n",rc);
+        //printk(tmp);
+
+	return rc;
+}
+
+
+
+static void ethtool_get_drvinfo(struct net_device *dev,
+	struct ethtool_drvinfo *info)
+{
+
+	strcpy(info->driver, "OpenCores Ethernet MAC driver");
+	strcpy(info->version, "0.9");
+	strcpy(info->bus_info, "Wishbone Bus");
+}
+
+
+
+
+static int ethtool_get_regs_len(struct net_device *dev)
+{
+	return (0x1F +1)*4;
+}
+
+
+static void ethtool_get_regs(struct net_device *dev, struct ethtool_regs *regs,
+	void *ptr)
+{
+	struct ethoc *priv = netdev_priv(dev);
+	int *buf = (int *) ptr;
+	int len;
+
+	mutex_lock(&priv->mulock);
+	regs->version = 0;
+	for (len = 0; len <= 0x1F; len++) {
+           *buf=ethoc_mdio_read(priv->mdio, 0, len);
+	   buf++;
+	}
+	mutex_unlock(&priv->mulock);
+}
+
+
+
+
+static u32 ethtool_get_msglevel(struct net_device *dev)
+{
+	struct ethoc *priv = netdev_priv(dev);
+
+	return priv->msg_enable;
+}
+
+static void ethtool_set_msglevel(struct net_device *dev, u32 value)
+{
+	struct ethoc *priv = netdev_priv(dev);
+
+	priv->msg_enable = value;
+}
+
+
+static struct ethtool_ops netdev_ethtool_ops = {
+	.get_settings		= ethtool_get_settings,
+	.set_settings		= ethtool_set_settings,
+	.nway_reset		= ethtool_nway_reset,
+	.get_link		= ethtool_get_link,
+	.get_drvinfo		= ethtool_get_drvinfo,
+	.get_regs_len		= ethtool_get_regs_len,
+	.get_regs		= ethtool_get_regs,
+	.get_msglevel		= ethtool_get_msglevel,
+	.set_msglevel		= ethtool_set_msglevel,
+};
+
+
+
+// -ms- ethtool support end 09.04.2012
+
+
 
 static const struct net_device_ops ethoc_netdev_ops = {
 	.ndo_open = ethoc_open,
@@ -913,9 +1208,12 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 	struct resource *mmio = NULL;
 	struct resource *mem = NULL;
 	struct ethoc *priv = NULL;
+	struct sockaddr saddr;
 	unsigned int phy;
 	int num_bd;
 	int ret = 0;
+        char tmp[40];
+	char *ascid, *ascid2;
 
 	/* allocate networking device */
 	netdev = alloc_etherdev(sizeof(struct ethoc));
@@ -1044,6 +1342,12 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 		mac = of_get_property(pdev->dev.of_node,
 				      "local-mac-address",
 				      NULL);
+
+                ascid = of_get_property(pdev->dev.of_node,
+                                      "devid",
+                                      NULL);
+                pdev->id = simple_strtol(ascid,&ascid2,10);
+
 		/* Better approach:
 		#include <linux/of_net.h>
 		mac = of_get_mac_address(pdev->dev.of_node);
@@ -1065,7 +1369,13 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 	if (!is_valid_ether_addr(netdev->dev_addr))
 		random_ether_addr(netdev->dev_addr);
 
-	ethoc_set_mac_address(netdev, netdev->dev_addr);
+        memcpy(netdev->perm_addr,netdev->dev_addr,IFHWADDRLEN);
+        memcpy(&saddr.sa_data,netdev->dev_addr,sizeof(saddr.sa_data));
+
+	ethoc_set_mac_address(netdev, &saddr);
+
+        snprintf(tmp,sizeof(tmp),"DeviceID: %d\n",pdev->id);
+        printk(tmp);
 
 	/* register MII bus */
 	priv->mdio = mdiobus_alloc();
@@ -1103,10 +1413,25 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 		goto error;
 	}
 
+        // -ms- ethtool support start 09.04.2012
+	priv->mii_if.phy_id_mask = 0x1F;
+	priv->mii_if.reg_num_mask = 0x1F;
+	priv->mii_if.dev = priv->mdio;         // -ms- "normally" this is net_device, but should work
+	priv->mii_if.mdio_read = ethoc_mdio_read;
+	priv->mii_if.mdio_write = ethoc_mdio_write;
+	priv->mii_if.phy_id = 0; //priv->phy_id;
+
+	priv->msg_enable = netif_msg_init(msg_enable,
+		(NETIF_MSG_DRV | NETIF_MSG_PROBE | NETIF_MSG_LINK));
+
+	mutex_init(&priv->mulock);
+
+        // -ms- ethtool support end 09.04.2012
 	ether_setup(netdev);
 
 	/* setup the net_device structure */
 	netdev->netdev_ops = &ethoc_netdev_ops;
+	SET_ETHTOOL_OPS(netdev, &netdev_ethtool_ops);
 	netdev->watchdog_timeo = ETHOC_TIMEOUT;
 	netdev->features |= 0;
 
@@ -1206,6 +1531,7 @@ static void __exit ethoc_exit(void)
 {
 	platform_driver_unregister(&ethoc_driver);
 }
+
 
 module_init(ethoc_init);
 module_exit(ethoc_exit);

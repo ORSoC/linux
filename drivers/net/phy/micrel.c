@@ -117,6 +117,10 @@ static int ks8051_config_init(struct phy_device *phydev)
 		regval |= KSZ8051_RMII_50MHZ_CLK;
 		phy_write(phydev, MII_KSZPHY_CTRL, regval);
 	}
+        /* De-isolate */
+        regval = phy_read(phydev, MII_BMCR);
+        regval &= ~BMCR_ISOLATE;
+        phy_write(phydev, MII_BMCR, regval);
 
 	return 0;
 }
