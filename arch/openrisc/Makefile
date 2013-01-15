@@ -53,3 +53,8 @@ endif
 core-$(BUILTIN_DTB) += arch/openrisc/boot/
 
 all: vmlinux
+
+boot := arch/openrisc/boot
+
+Image uImage: vmlinux
+	$(Q)$(MAKE) $(build)=$(boot) MACHINE=$(MACHINE) $(boot)/$@

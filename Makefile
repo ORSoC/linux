@@ -921,8 +921,6 @@ endif
 	$(call vmlinux-modpost)
 	$(call if_changed_rule,vmlinux__)
 	$(Q)rm -f .old_version
-	$(OBJCOPY) -O binary vmlinux vmlinux.bin
-#	$(OBJDUMP) -d vmlinux > vmlinux.dis
 
 # build vmlinux.o first to catch section mismatch errors early
 ifdef CONFIG_KALLSYMS
