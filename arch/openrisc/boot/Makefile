@@ -36,8 +36,9 @@ $(obj)/Image: vmlinux FORCE
 	$(call if_changed,objcopy)
 	@echo '  Kernel: $@ is ready'
 
-ifneq ($(suffix),))
-$(obj)/Image$(suffix}: $(obj)/Image
+ifneq ($(suffix),)
+$(obj)/Image$(suffix): $(obj)/Image FORCE
+	$(call if_changed,$(compression))
 endif
 
 $(obj)/uImage: $(obj)/Image$(suffix)
