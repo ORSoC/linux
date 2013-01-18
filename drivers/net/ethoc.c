@@ -452,8 +452,6 @@ static int ethoc_rx(struct net_device *dev, int limit)
 {
 	struct ethoc *priv = netdev_priv(dev);
 	int count;
-	//char tmp[40];
-
 
 	for (count = 0; count < limit; ++count) {
 		unsigned int entry;
@@ -640,6 +638,7 @@ static int ethoc_get_mac_address(struct net_device *dev, void *addr)
 	mac[0] = (reg >>  8) & 0xff;
 	mac[1] = (reg >>  0) & 0xff;
 
+printk("ethoc MAC: %02x:%02x:%02x:%02x:%02x:%02x\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 	return 0;
 }
 
@@ -792,15 +791,13 @@ static int ethoc_open(struct net_device *dev)
 {
 	struct ethoc *priv = netdev_priv(dev);
 	int ret;
-	//char tmp[40];
 
 	ret = request_irq(dev->irq, ethoc_interrupt, IRQF_SHARED,
 			dev->name, dev);
 	if (ret)
 		return ret;
         
-        //snprintf(tmp,sizeof(tmp),"ethoc_open: request_irq=%d\n",ret);
-	//printk(tmp);
+        //printk("ethoc_open: request_irq=%d\n",ret);
 
 	ethoc_init_ring(priv, dev->mem_start);
 	ethoc_reset(priv);
@@ -848,9 +845,7 @@ static int ethoc_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	struct mii_ioctl_data *mdio = if_mii(ifr);
 	struct phy_device *phy = NULL;
 
-        //static char str[40];
-        //snprintf(str,128,"*****ethoc_ioctl: cmd=%x\n",cmd);
-        //printk(str);
+printk("ethoc_ioctl: cmd=%x\n",cmd);
 
 	if (!netif_running(dev)) {
 		//printk("ethoc_ioctl: EINVAL\n");
@@ -858,8 +853,8 @@ static int ethoc_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	}
 
 
-	if (cmd == SIOCGIFHWADDR) {
-	   return ethoc_get_mac_address(dev, ifr->ifr_hwaddr.sa_data);	
+	if (cmd == SIOCDEVPRIVATE) {
+	   return ethoc_get_mac_address(dev, dev->dev_addr);
 	}
 
 	if (cmd != SIOCGMIIPHY) {
@@ -894,10 +889,7 @@ static void ethoc_set_multicast_list(struct net_device *dev)
 	u32 hash[2] = { 0, 0 };
 
 
-        //char tmp[40];
-
-	//snprintf(tmp,sizeof(tmp),"set_multicast_list: inmode=0x%0x\n",mode);
-	//printk(tmp);
+	//printk("set_multicast_list: inmode=0x%0x\n",mode);
 
 	/* set loopback mode if requested */
 	if (dev->flags & IFF_LOOPBACK)
@@ -917,8 +909,7 @@ static void ethoc_set_multicast_list(struct net_device *dev)
 	else
 		mode &= ~MODER_PRO;
 
-	//snprintf(tmp,sizeof(tmp),"set_multicast_list: setmode=0x%0x\n",mode);
-	//printk(tmp);
+	//printk("set_multicast_list: setmode=0x%0x\n",mode);
 
 	ethoc_write(priv, MODER, mode);
 
@@ -1103,12 +1094,10 @@ static u32 ethtool_get_link(struct net_device *dev)
 {
 	struct ethoc *priv = netdev_priv(dev);
 	int rc;
-	//char tmp[80];
         
 	rc = mii_link_ok(&priv->mii_if);
 
-        //snprintf(tmp,sizeof(tmp),"ethtool_get_link: rc=%lu\n",rc);
-        //printk(tmp);
+        //printk("ethtool_get_link: rc=%lu\n",rc);
 
 	return rc;
 }
@@ -1212,7 +1201,6 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 	unsigned int phy;
 	int num_bd;
 	int ret = 0;
-        char tmp[40];
 	char *ascid, *ascid2;
 
 	/* allocate networking device */
@@ -1374,8 +1362,7 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 
 	ethoc_set_mac_address(netdev, &saddr);
 
-        snprintf(tmp,sizeof(tmp),"DeviceID: %d\n",pdev->id);
-        printk(tmp);
+        printk("DeviceID: %d\n",pdev->id);
 
 	/* register MII bus */
 	priv->mdio = mdiobus_alloc();
@@ -1522,13 +1509,46 @@ static struct platform_driver ethoc_driver = {
 	},
 };
 
+static struct of_device_id ethoctb_match[] = {
+	{ .compatible = "opencores,ethmac-rtlsvn338tb" },
+	{},
+};
+MODULE_DEVICE_TABLE(of, ethoctb_match);
+
+static struct platform_driver ethoctb_driver = {
+	.probe   = ethoc_probe,
+	.remove  = __devexit_p(ethoc_remove),
+	.suspend = ethoc_suspend,
+	.resume  = ethoc_resume,
+	.driver  = {
+		.name = "ethoctb",
+		.owner = THIS_MODULE,
+		.of_match_table = ethoctb_match,
+	},
+};
+
 static int __init ethoc_init(void)
 {
-	return platform_driver_register(&ethoc_driver);
+	int ret;
+	int ok = 0;
+       	ret = platform_driver_register(&ethoc_driver);
+	if (!ret)
+		ok = 1;
+	else
+		printk("ethoc: Failed to register ethoc platform driver: %d\n", ret);
+	ret = platform_driver_register(&ethoctb_driver);
+	if (!ret)
+		ok = 1;
+	else
+		printk("ethoc: Failed to register ethoctb platform driver: %d\n", ret);
+	if (!ok)
+		return ret;
+	return 0;
 }
 
 static void __exit ethoc_exit(void)
 {
+	platform_driver_unregister(&ethoctb_driver);
 	platform_driver_unregister(&ethoc_driver);
 }
 
