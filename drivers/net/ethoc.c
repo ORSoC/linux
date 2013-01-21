@@ -175,6 +175,11 @@ MODULE_PARM_DESC(buffer_size, "DMA buffer allocation size");
 #define	ETHOC_TIMEOUT		(HZ / 2)
 #define	ETHOC_MII_TIMEOUT	(1 + (HZ / 5))
 
+enum ethoc_type {
+	ETHOC_DEVTYPE_ETHERNET = 1,
+	ETHOC_DEVTYPE_TOKENBUS
+};
+
 /**
  * struct ethoc - driver-private device structure
  * @iobase:	pointer to I/O memory region
@@ -810,7 +815,8 @@ static int ethoc_open(struct net_device *dev)
 		netif_start_queue(dev);
 	}
 
-	phy_start(priv->phy);
+	if (priv->phy)
+		phy_start(priv->phy);
 	napi_enable(&priv->napi);
 
 	if (netif_msg_ifup(priv)) {
@@ -856,6 +862,9 @@ printk("ethoc_ioctl: cmd=%x\n",cmd);
 	if (cmd == SIOCDEVPRIVATE) {
 	   return ethoc_get_mac_address(dev, dev->dev_addr);
 	}
+
+	if (!priv->mdio)
+		return -EINVAL;
 
 	if (cmd != SIOCGMIIPHY) {
 		if (mdio->phy_id >= PHY_MAX_ADDR) {
@@ -1190,7 +1199,7 @@ static const struct net_device_ops ethoc_netdev_ops = {
  * ethoc_probe() - initialize OpenCores ethernet MAC
  * pdev:	platform device
  */
-static int __devinit ethoc_probe(struct platform_device *pdev)
+static int __devinit ethoc_probe_common(struct platform_device *pdev, enum ethoc_type type)
 {
 	struct net_device *netdev = NULL;
 	struct resource *res = NULL;
@@ -1364,6 +1373,7 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 
         printk("DeviceID: %d\n",pdev->id);
 
+	if (type == ETHOC_DEVTYPE_ETHERNET) {
 	/* register MII bus */
 	priv->mdio = mdiobus_alloc();
 	if (!priv->mdio) {
@@ -1407,6 +1417,7 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 	priv->mii_if.mdio_read = ethoc_mdio_read;
 	priv->mii_if.mdio_write = ethoc_mdio_write;
 	priv->mii_if.phy_id = 0; //priv->phy_id;
+	}
 
 	priv->msg_enable = netif_msg_init(msg_enable,
 		(NETIF_MSG_DRV | NETIF_MSG_PROBE | NETIF_MSG_LINK));
@@ -1446,6 +1457,16 @@ free:
 	free_netdev(netdev);
 out:
 	return ret;
+}
+
+static int __devinit ethoc_probe(struct platform_device *pdev)
+{
+	return ethoc_probe_common(pdev, ETHOC_DEVTYPE_ETHERNET);
+}
+
+static int __devinit ethoctb_probe(struct platform_device *pdev)
+{
+	return ethoc_probe_common(pdev, ETHOC_DEVTYPE_TOKENBUS);
 }
 
 /**
@@ -1516,7 +1537,7 @@ static struct of_device_id ethoctb_match[] = {
 MODULE_DEVICE_TABLE(of, ethoctb_match);
 
 static struct platform_driver ethoctb_driver = {
-	.probe   = ethoc_probe,
+	.probe   = ethoctb_probe,
 	.remove  = __devexit_p(ethoc_remove),
 	.suspend = ethoc_suspend,
 	.resume  = ethoc_resume,
