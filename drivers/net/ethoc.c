@@ -1374,49 +1374,49 @@ static int __devinit ethoc_probe_common(struct platform_device *pdev, enum ethoc
         printk("DeviceID: %d\n",pdev->id);
 
 	if (type == ETHOC_DEVTYPE_ETHERNET) {
-	/* register MII bus */
-	priv->mdio = mdiobus_alloc();
-	if (!priv->mdio) {
-		ret = -ENOMEM;
-		goto free;
-	}
+		/* register MII bus */
+		priv->mdio = mdiobus_alloc();
+		if (!priv->mdio) {
+			ret = -ENOMEM;
+			goto free;
+		}
 
-	priv->mdio->name = "ethoc-mdio";
-	snprintf(priv->mdio->id, MII_BUS_ID_SIZE, "%s-%d",
-			priv->mdio->name, pdev->id);
-	priv->mdio->read = ethoc_mdio_read;
-	priv->mdio->write = ethoc_mdio_write;
-	priv->mdio->reset = ethoc_mdio_reset;
-	priv->mdio->priv = priv;
+		priv->mdio->name = "ethoc-mdio";
+		snprintf(priv->mdio->id, MII_BUS_ID_SIZE, "%s-%d",
+				priv->mdio->name, pdev->id);
+		priv->mdio->read = ethoc_mdio_read;
+		priv->mdio->write = ethoc_mdio_write;
+		priv->mdio->reset = ethoc_mdio_reset;
+		priv->mdio->priv = priv;
 
-	priv->mdio->irq = kmalloc(sizeof(int) * PHY_MAX_ADDR, GFP_KERNEL);
-	if (!priv->mdio->irq) {
-		ret = -ENOMEM;
-		goto free_mdio;
-	}
+		priv->mdio->irq = kmalloc(sizeof(int) * PHY_MAX_ADDR, GFP_KERNEL);
+		if (!priv->mdio->irq) {
+			ret = -ENOMEM;
+			goto free_mdio;
+		}
 
-	for (phy = 0; phy < PHY_MAX_ADDR; phy++)
-		priv->mdio->irq[phy] = PHY_POLL;
+		for (phy = 0; phy < PHY_MAX_ADDR; phy++)
+			priv->mdio->irq[phy] = PHY_POLL;
 
-	ret = mdiobus_register(priv->mdio);
-	if (ret) {
-		dev_err(&netdev->dev, "failed to register MDIO bus\n");
-		goto free_mdio;
-	}
+		ret = mdiobus_register(priv->mdio);
+		if (ret) {
+			dev_err(&netdev->dev, "failed to register MDIO bus\n");
+			goto free_mdio;
+		}
 
-	ret = ethoc_mdio_probe(netdev);
-	if (ret) {
-		dev_err(&netdev->dev, "failed to probe MDIO bus\n");
-		goto error;
-	}
+		ret = ethoc_mdio_probe(netdev);
+		if (ret) {
+			dev_err(&netdev->dev, "failed to probe MDIO bus\n");
+			goto error;
+		}
 
-        // -ms- ethtool support start 09.04.2012
-	priv->mii_if.phy_id_mask = 0x1F;
-	priv->mii_if.reg_num_mask = 0x1F;
-	priv->mii_if.dev = priv->mdio;         // -ms- "normally" this is net_device, but should work
-	priv->mii_if.mdio_read = ethoc_mdio_read;
-	priv->mii_if.mdio_write = ethoc_mdio_write;
-	priv->mii_if.phy_id = 0; //priv->phy_id;
+		// -ms- ethtool support start 09.04.2012
+		priv->mii_if.phy_id_mask = 0x1F;
+		priv->mii_if.reg_num_mask = 0x1F;
+		priv->mii_if.dev = priv->mdio;         // -ms- "normally" this is net_device, but should work
+		priv->mii_if.mdio_read = ethoc_mdio_read;
+		priv->mii_if.mdio_write = ethoc_mdio_write;
+		priv->mii_if.phy_id = 0; //priv->phy_id;
 	}
 
 	priv->msg_enable = netif_msg_init(msg_enable,
