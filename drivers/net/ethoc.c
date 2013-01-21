@@ -241,6 +241,8 @@ struct ethoc {
 	
         // -ms- ethtool support end 09.04.2012
 
+	int if_type;
+
 };
 
 
@@ -387,7 +389,9 @@ static int ethoc_reset(struct ethoc *dev)
 
 	/* enable FCS generation and automatic padding */
 	mode = ethoc_read(dev, MODER);
-	mode |= MODER_CRC | MODER_PAD;
+	mode |= MODER_CRC;
+	if (dev->if_type != ETHOC_DEVTYPE_TOKENBUS)
+		mode |= MODER_PAD;
 	ethoc_write(dev, MODER, mode);
 
         dev->speed=100;
@@ -958,6 +962,10 @@ static netdev_tx_t ethoc_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct ethoc_bd bd;
 	unsigned int entry;
 	void *dest;
+	int do_debug = priv->if_type == ETHOC_DEVTYPE_TOKENBUS;
+
+	printk(KERN_DEBUG "ethoc start_xmit: len=%d\n", skb->len);
+	if (do_debug)
 
 	if (unlikely(skb->len > ETHOC_BUFSIZ)) {
 		dev->stats.tx_errors++;
@@ -970,7 +978,7 @@ static netdev_tx_t ethoc_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	ethoc_read_bd(priv, entry, &bd);
         /* Unnecessary test - PAD flag does no harm if packet is large enough */
-	if (unlikely(skb->len < ETHOC_ZLEN))
+	if (unlikely(skb->len < ETHOC_ZLEN) && priv->if_type != ETHOC_DEVTYPE_TOKENBUS)
 		bd.stat |=  TX_BD_PAD;
 	else
 		bd.stat &= ~TX_BD_PAD;
@@ -984,6 +992,11 @@ static netdev_tx_t ethoc_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
         /* unnecessary two step write - READY should already be cleared given a free bd */
 	bd.stat |= TX_BD_READY;
+	if (do_debug) {
+		printk(KERN_DEBUG "ethoc bd %d stat=%x\n", entry, bd.stat);
+		print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_OFFSET, 16, 1, dest, skb->len, false);
+	}
+
 	ethoc_write_bd(priv, entry, &bd);
 
 	if (priv->cur_tx == (priv->dty_tx + priv->num_tx)) {
@@ -1207,10 +1220,8 @@ static int __devinit ethoc_probe_common(struct platform_device *pdev, enum ethoc
 	struct resource *mem = NULL;
 	struct ethoc *priv = NULL;
 	struct sockaddr saddr;
-	unsigned int phy;
 	int num_bd;
 	int ret = 0;
-	char *ascid, *ascid2;
 
 	/* allocate networking device */
 	netdev = alloc_etherdev(sizeof(struct ethoc));
@@ -1272,6 +1283,7 @@ static int __devinit ethoc_probe_common(struct platform_device *pdev, enum ethoc
 	priv->netdev = netdev;
 	priv->dma_alloc = 0;
 	priv->io_region_size = resource_size(mmio);
+	priv->if_type = type;
 
 	priv->iobase = devm_ioremap_nocache(&pdev->dev, netdev->base_addr,
 			resource_size(mmio));
@@ -1334,6 +1346,7 @@ static int __devinit ethoc_probe_common(struct platform_device *pdev, enum ethoc
 
 #ifdef CONFIG_OF
 		{
+		char *ascid, *ascid2;
 		const uint8_t* mac;
 
 		mac = of_get_property(pdev->dev.of_node,
@@ -1373,7 +1386,13 @@ static int __devinit ethoc_probe_common(struct platform_device *pdev, enum ethoc
 
         printk("DeviceID: %d\n",pdev->id);
 
+	if (type == ETHOC_DEVTYPE_TOKENBUS) {
+		ethoc_write(priv, PACKETLEN, PACKETLEN_MIN_MAX(4, 1500));
+	}
+
 	if (type == ETHOC_DEVTYPE_ETHERNET) {
+		unsigned int phy;
+
 		/* register MII bus */
 		priv->mdio = mdiobus_alloc();
 		if (!priv->mdio) {
