@@ -647,7 +647,6 @@ static int ethoc_get_mac_address(struct net_device *dev, void *addr)
 	mac[0] = (reg >>  8) & 0xff;
 	mac[1] = (reg >>  0) & 0xff;
 
-printk("ethoc MAC: %02x:%02x:%02x:%02x:%02x:%02x\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 	return 0;
 }
 
@@ -964,7 +963,6 @@ static netdev_tx_t ethoc_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	void *dest;
 	int do_debug = priv->if_type == ETHOC_DEVTYPE_TOKENBUS;
 
-	printk(KERN_DEBUG "ethoc start_xmit: len=%d\n", skb->len);
 	if (do_debug)
 
 	if (unlikely(skb->len > ETHOC_BUFSIZ)) {
@@ -993,7 +991,7 @@ static netdev_tx_t ethoc_start_xmit(struct sk_buff *skb, struct net_device *dev)
         /* unnecessary two step write - READY should already be cleared given a free bd */
 	bd.stat |= TX_BD_READY;
 	if (do_debug) {
-		printk(KERN_DEBUG "ethoc bd %d stat=%x\n", entry, bd.stat);
+		printk(KERN_DEBUG "ethoc bd %d stat=%x len=%d\n", entry, bd.stat, skb->len);
 		print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_OFFSET, 16, 1, dest, skb->len, false);
 	}
 
