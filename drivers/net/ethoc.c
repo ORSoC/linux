@@ -469,9 +469,6 @@ static int ethoc_rx(struct net_device *dev, int limit)
 		entry = priv->num_tx + priv->cur_rx;
 		ethoc_read_bd(priv, entry, &bd);
 
-	        //snprintf(tmp,sizeof(tmp),"ethoc_rx: len=%d bd.stat=0x%0x\n",bd.stat >> 16,bd.stat&0xFFFF);
-		//printk(tmp);
-
 		if (bd.stat & RX_BD_EMPTY) {
 			ethoc_ack_irq(priv, INT_MASK_RX);
 			/* If packet (interrupt) came in between checking
@@ -673,10 +670,6 @@ static int ethoc_mdio_read(struct mii_bus *bus, int phy, int reg)
 {
 	struct ethoc *priv = bus->priv;
 	int i;
-	//char tmp[80];
-
-        //snprintf(tmp,sizeof(tmp),"ethoc_mdio_read(phy=%d,reg=%d\n",phy,reg);
-        //printk(tmp);
 
 	ethoc_write(priv, MIIADDRESS, MIIADDRESS_ADDR(phy, reg));
 	ethoc_write(priv, MIICOMMAND, MIICOMMAND_READ);
@@ -687,13 +680,11 @@ static int ethoc_mdio_read(struct mii_bus *bus, int phy, int reg)
 			u32 data = ethoc_read(priv, MIIRX_DATA);
 			/* reset MII command register */
 			ethoc_write(priv, MIICOMMAND, 0);
-                        //printk("ethoc_mdio_read: return data\n");
 			return data;
 		}
 		usleep_range(100,200);
 	}
 
-        //printk("ethoc_mdio_read: Exit EBUSY\n");
 	return -EBUSY;
 }
 
@@ -701,10 +692,6 @@ static int ethoc_mdio_write(struct mii_bus *bus, int phy, int reg, u16 val)
 {
 	struct ethoc *priv = bus->priv;
 	int i;
-	//char tmp[80];
-
-        //snprintf(tmp,sizeof(tmp),"ethoc_mdio_write(phy=%d,reg=%d,val=0x%0x\n",phy,reg,val);
-        //printk(tmp);
 
 	ethoc_write(priv, MIIADDRESS, MIIADDRESS_ADDR(phy, reg));
 	ethoc_write(priv, MIITX_DATA, val);
@@ -715,26 +702,22 @@ static int ethoc_mdio_write(struct mii_bus *bus, int phy, int reg, u16 val)
 		if (!(stat & MIISTATUS_BUSY)) {
 			/* reset MII command register */
 			ethoc_write(priv, MIICOMMAND, 0);
-                        //printk("ethoc_mdio_write: Exit 0\n");
 			return 0;
 		}
 		usleep_range(100,200);
 	}
 
-        //printk("ethoc_mdio_write: Exit EBUSY\n");
 	return -EBUSY;
 }
 
 static int ethoc_mdio_reset(struct mii_bus *bus)
 {
-        //printk("ethoc_mdio_reset: DUMMY\n");
 	return 0;
 }
 
 
 static void ethoc_mdio_poll(struct net_device *dev)
 {
-        //printk("ethoc_mdio_poll: DUMMY\n");
 }
 
 
@@ -777,13 +760,6 @@ static int ethoc_set_mac_address(struct net_device *dev, struct sockaddr *addr)
 {
 	struct ethoc *priv = netdev_priv(dev);
 	u8 *mac = (u8 *)addr->sa_data;
-	//char tmp[40];
-
-        //snprintf(tmp,sizeof(tmp),"set_mac_address(%02x:%02x:%02x:%02x:%02x:%02x)\n", 
-        //                           mac[0],mac[1],mac[2],
-        //                           mac[3],mac[4],mac[5]);
-	//printk(tmp);
-        
 
 	memcpy(dev->dev_addr, mac, IFHWADDRLEN);
 
@@ -805,8 +781,6 @@ static int ethoc_open(struct net_device *dev)
 	if (ret)
 		return ret;
         
-        //printk("ethoc_open: request_irq=%d\n",ret);
-
 	ethoc_init_ring(priv, dev->mem_start);
 	ethoc_reset(priv);
 
@@ -854,10 +828,7 @@ static int ethoc_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	struct mii_ioctl_data *mdio = if_mii(ifr);
 	struct phy_device *phy = NULL;
 
-printk("ethoc_ioctl: cmd=%x\n",cmd);
-
 	if (!netif_running(dev)) {
-		//printk("ethoc_ioctl: EINVAL\n");
 		return -EINVAL;
 	}
 
@@ -871,13 +842,11 @@ printk("ethoc_ioctl: cmd=%x\n",cmd);
 
 	if (cmd != SIOCGMIIPHY) {
 		if (mdio->phy_id >= PHY_MAX_ADDR) {
-			//printk("ethoc_ioctl: ERANGE\n");
 			return -ERANGE;
 		}
 
 		phy = priv->mdio->phy_map[mdio->phy_id];
 		if (!phy) {
-			//printk("ethoc_ioctl: ENODEV\n");
 			return -ENODEV;
 		}
 	} else {
@@ -900,9 +869,6 @@ static void ethoc_set_multicast_list(struct net_device *dev)
 	struct netdev_hw_addr *ha;
 	u32 hash[2] = { 0, 0 };
 
-
-	//printk("set_multicast_list: inmode=0x%0x\n",mode);
-
 	/* set loopback mode if requested */
 	if (dev->flags & IFF_LOOPBACK)
 		mode |=  MODER_LOOP;
@@ -920,8 +886,6 @@ static void ethoc_set_multicast_list(struct net_device *dev)
 		mode |=  MODER_PRO;
 	else
 		mode &= ~MODER_PRO;
-
-	//printk("set_multicast_list: setmode=0x%0x\n",mode);
 
 	ethoc_write(priv, MODER, mode);
 
@@ -961,9 +925,6 @@ static netdev_tx_t ethoc_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct ethoc_bd bd;
 	unsigned int entry;
 	void *dest;
-	int do_debug = priv->if_type == ETHOC_DEVTYPE_TOKENBUS;
-
-	if (do_debug)
 
 	if (unlikely(skb->len > ETHOC_BUFSIZ)) {
 		dev->stats.tx_errors++;
@@ -990,10 +951,6 @@ static netdev_tx_t ethoc_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
         /* unnecessary two step write - READY should already be cleared given a free bd */
 	bd.stat |= TX_BD_READY;
-	if (do_debug) {
-		printk(KERN_DEBUG "ethoc bd %d stat=%x len=%d\n", entry, bd.stat, skb->len);
-		print_hex_dump(KERN_DEBUG, "", DUMP_PREFIX_OFFSET, 16, 1, dest, skb->len, false);
-	}
 
 	ethoc_write_bd(priv, entry, &bd);
 
@@ -1116,8 +1073,6 @@ static u32 ethtool_get_link(struct net_device *dev)
 	int rc;
         
 	rc = mii_link_ok(&priv->mii_if);
-
-        //printk("ethtool_get_link: rc=%lu\n",rc);
 
 	return rc;
 }
@@ -1381,8 +1336,6 @@ static int __devinit ethoc_probe_common(struct platform_device *pdev, enum ethoc
         memcpy(&saddr.sa_data,netdev->dev_addr,sizeof(saddr.sa_data));
 
 	ethoc_set_mac_address(netdev, &saddr);
-
-        printk("DeviceID: %d\n",pdev->id);
 
 	if (type == ETHOC_DEVTYPE_TOKENBUS) {
 		ethoc_write(priv, PACKETLEN, PACKETLEN_MIN_MAX(4, 1500));
