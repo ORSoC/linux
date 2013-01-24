@@ -986,6 +986,9 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 		goto error;
 	}
 
+	/* make sure the controller is squerely halted */
+	ethoc_write(priv, MODER, 0);
+
 	if (netdev->mem_end) {
 		priv->membase = devm_ioremap_nocache(&pdev->dev,
 			netdev->mem_start, resource_size(mem));
