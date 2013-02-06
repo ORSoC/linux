@@ -33,6 +33,9 @@
 OUTPUT_FORMAT("elf32-or32", "elf32-or32", "elf32-or32")
 jiffies = jiffies_64 + 4;
 
+_reset_vector = 0x100;
+ENTRY(_reset_vector)
+
 SECTIONS
 {
         /* Read-only sections, merged into text segment: */
