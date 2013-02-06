@@ -52,32 +52,6 @@
  */
 struct thread_info *current_thread_info_set[NR_CPUS] = { &init_thread_info, };
 
-void machine_restart(void)
-{
-	printk(KERN_INFO "*** MACHINE RESTART ***\n");
-	__asm__("l.nop 1");
-}
-
-/*
- * Similar to machine_power_off, but don't shut off power.  Add code
- * here to freeze the system for e.g. post-mortem debug purpose when
- * possible.  This halt has nothing to do with the idle halt.
- */
-void machine_halt(void)
-{
-	printk(KERN_INFO "*** MACHINE HALT ***\n");
-	__asm__("l.nop 1");
-}
-
-/* If or when software power-off is implemented, add code here.  */
-void machine_power_off(void)
-{
-	printk(KERN_INFO "*** MACHINE POWER OFF ***\n");
-	__asm__("l.nop 1");
-}
-
-void (*pm_power_off) (void) = machine_power_off;
-
 /*
  * When a process does an "exec", machine state like FPU and debug
  * registers need to be reset.  This is a hook function for that.
