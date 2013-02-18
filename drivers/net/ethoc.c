@@ -225,35 +225,15 @@ struct ethoc {
 	struct mii_bus *mdio;
 	s8 phy_id;
 
-        // -ms- ethtool support start 09.04.2012
-
 	struct mutex mulock;
-
 	struct mii_if_info mii_if;
-	u32 advertising;
-
-	int media_state;
-	int multicast;
-	int promiscuous;
-	int duplex;
-	int speed;
-	int force_link;
-	
-        // -ms- ethtool support end 09.04.2012
 
 	int if_type;
 
 };
 
-
-
-// -ms- ethtool support start 09.04.2012
-
-static int msg_enable;
-
-// -ms- ethtool support end 09.04.2012
-
-
+/* Debug level */
+int debug = -1;
 
 /**
  * struct ethoc_bd - buffer descriptor
@@ -393,10 +373,6 @@ static int ethoc_reset(struct ethoc *dev)
 	if (dev->if_type != ETHOC_DEVTYPE_TOKENBUS)
 		mode |= MODER_PAD;
 	ethoc_write(dev, MODER, mode);
-
-        dev->speed=100;
-	dev->duplex=1;
-	dev->force_link=0;
 
 	/* set full-duplex mode */
 	mode = ethoc_read(dev, MODER);
@@ -968,8 +944,6 @@ out:
 
 
 
-// -ms- ethtool support start 09.04.2012
-
 /*
  * ethtool support
  */
@@ -990,11 +964,7 @@ static int ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *cmd)
 
 	mutex_lock(&priv->mulock);
 	mii_ethtool_gset(&priv->mii_if, cmd);
-	//cmd->advertising |= SUPPORTED_TP;
 	mutex_unlock(&priv->mulock);
-
-	/* Save advertised settings for workaround in next function. */
-	//priv->advertising = cmd->advertising;
 	return 0;
 }
 
@@ -1003,52 +973,9 @@ static int ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *cmd)
 static int ethtool_set_settings(struct net_device *dev, struct ethtool_cmd *cmd)
 {
 	struct ethoc *priv = netdev_priv(dev);
-	u32 speed = ethtool_cmd_speed(cmd);
 	int rc;
 
-	/*
-	 * ethtool utility does not change advertised setting if auto
-	 * negotiation is not specified explicitly.
-	 */
-/*
-	if (cmd->autoneg && priv->advertising == cmd->advertising) {
-		cmd->advertising |= ADVERTISED_ALL;
-		if (10 == speed)
-			cmd->advertising &=
-				~(ADVERTISED_100baseT_Full |
-				ADVERTISED_100baseT_Half);
-		else if (100 == speed)
-			cmd->advertising &=
-				~(ADVERTISED_10baseT_Full |
-				ADVERTISED_10baseT_Half);
-		if (0 == cmd->duplex)
-			cmd->advertising &=
-				~(ADVERTISED_100baseT_Full |
-				ADVERTISED_10baseT_Full);
-		else if (1 == cmd->duplex)
-			cmd->advertising &=
-				~(ADVERTISED_100baseT_Half |
-				ADVERTISED_10baseT_Half);
-	}
-*/
 	mutex_lock(&priv->mulock);
-/*
-	if (cmd->autoneg &&
-			(cmd->advertising & ADVERTISED_ALL) ==
-			ADVERTISED_ALL) {
-		priv->duplex = 0;
-		priv->speed = 0;
-		priv->force_link = 0;
-	} else {
-		priv->duplex = cmd->duplex;
-		if (1000 != speed)
-			priv->speed = speed;
-		if (cmd->autoneg)
-			priv->force_link = 0;
-		else
-			priv->force_link = 1;
-	}
-*/
 	rc = mii_ethtool_sset(&priv->mii_if, cmd);
 	mutex_unlock(&priv->mulock);
 	return rc;
@@ -1142,11 +1069,6 @@ static struct ethtool_ops netdev_ethtool_ops = {
 	.get_msglevel		= ethtool_get_msglevel,
 	.set_msglevel		= ethtool_set_msglevel,
 };
-
-
-
-// -ms- ethtool support end 09.04.2012
-
 
 
 static const struct net_device_ops ethoc_netdev_ops = {
@@ -1332,8 +1254,10 @@ static int __devinit ethoc_probe_common(struct platform_device *pdev, enum ethoc
 
 	/* Check the MAC again for validity, if it still isn't choose and
 	 * program a random one. */
-	if (!is_valid_ether_addr(netdev->dev_addr))
+	if (!is_valid_ether_addr(netdev->dev_addr) && priv->if_type != ETHOC_DEVTYPE_TOKENBUS) {
+		printk("Assigning random MAC");
 		random_ether_addr(netdev->dev_addr);
+	}
 
         memcpy(netdev->perm_addr,netdev->dev_addr,IFHWADDRLEN);
         memcpy(&saddr.sa_data,netdev->dev_addr,sizeof(saddr.sa_data));
@@ -1383,7 +1307,6 @@ static int __devinit ethoc_probe_common(struct platform_device *pdev, enum ethoc
 			goto error;
 		}
 
-		// -ms- ethtool support start 09.04.2012
 		priv->mii_if.phy_id_mask = 0x1F;
 		priv->mii_if.reg_num_mask = 0x1F;
 		priv->mii_if.dev = priv->mdio;         // -ms- "normally" this is net_device, but should work
@@ -1392,12 +1315,11 @@ static int __devinit ethoc_probe_common(struct platform_device *pdev, enum ethoc
 		priv->mii_if.phy_id = 0; //priv->phy_id;
 	}
 
-	priv->msg_enable = netif_msg_init(msg_enable,
+	priv->msg_enable = netif_msg_init(debug,
 		(NETIF_MSG_DRV | NETIF_MSG_PROBE | NETIF_MSG_LINK));
 
 	mutex_init(&priv->mulock);
 
-        // -ms- ethtool support end 09.04.2012
 	ether_setup(netdev);
 
 	/* setup the net_device structure */
@@ -1416,6 +1338,9 @@ static int __devinit ethoc_probe_common(struct platform_device *pdev, enum ethoc
 		dev_err(&netdev->dev, "failed to register interface\n");
 		goto error2;
 	}
+
+	/* Default link down until link detection kicks in */
+	netif_carrier_off(netdev);
 
 	goto out;
 
@@ -1553,4 +1478,6 @@ module_exit(ethoc_exit);
 MODULE_AUTHOR("Thierry Reding <thierry.reding@avionic-design.de>");
 MODULE_DESCRIPTION("OpenCores Ethernet MAC driver");
 MODULE_LICENSE("GPL v2");
+module_param(debug, int, 0);
+MODULE_PARM_DESC(debug, "Debug verbosity level (0=none, ..., ffff=all)");
 
