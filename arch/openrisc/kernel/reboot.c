@@ -15,10 +15,17 @@
 #include <linux/interrupt.h>
 #include <linux/pm.h>
 
+u32 *ordb2_reset = NULL;
+
 void machine_restart(char *cmd)
 {
-	printk(KERN_INFO "*** MACHINE RESTART ***\n");
 	local_irq_disable();
+	if (ordb2_reset) {
+		printk(KERN_INFO "Rebooting..\n");
+		*ordb2_reset = 1;
+	}
+	wmb();
+	printk(KERN_INFO "*** MACHINE RESTART ***\n");
 	__asm__("l.nop 1");
 	while(1);
 }
@@ -30,8 +37,8 @@ void machine_restart(char *cmd)
  */
 void machine_halt(void)
 {
-	printk(KERN_INFO "*** MACHINE HALT ***\n");
 	local_irq_disable();
+	printk(KERN_INFO "*** MACHINE HALT ***\n");
 	__asm__("l.nop 1");
 	while(1);
 }
@@ -39,9 +46,13 @@ void machine_halt(void)
 /* If or when software power-off is implemented, add code here.  */
 void machine_power_off(void)
 {
-	printk(KERN_INFO "*** MACHINE POWER OFF ***\n");
 	local_irq_disable();
+	printk(KERN_INFO "*** MACHINE POWER OFF ***\n");
 	__asm__("l.nop 1");
+	if (ordb2_reset) {
+		printk(KERN_INFO "Resetting the FPGA..\n");
+		*ordb2_reset = 2;
+	}
 	while(1);
 }
 

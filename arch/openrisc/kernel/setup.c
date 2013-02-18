@@ -198,7 +198,23 @@ void __init setup_cpuinfo(void)
 
 	of_node_put(cpu);
 
+
 	print_cpuinfo();
+}
+
+void __init setup_reset(void)
+{
+	extern u32 __iomem *ordb2_reset;
+	struct device_node *dn;
+	dn = of_find_compatible_node(NULL, NULL, "opencores,reset-ordb2");
+	if (!dn) {
+		printk(KERN_INFO "No reset node in device tree...\n");
+		
+		return;
+	}
+	ordb2_reset = of_iomap(dn, 0);
+	printk(KERN_DEBUG "Reset at %p\n", ordb2_reset);
+	of_node_put(dn);
 }
 
 /**
@@ -311,6 +327,8 @@ void __init setup_arch(char **cmdline_p)
 
 	/* paging_init() sets up the MMU and marks all pages as reserved */
 	paging_init();
+
+	setup_reset();
 
 #if defined(CONFIG_VT) && defined(CONFIG_DUMMY_CONSOLE)
 	if (!conswitchp)
