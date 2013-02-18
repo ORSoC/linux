@@ -81,6 +81,7 @@ MODULE_PARM_DESC(buffer_size, "DMA buffer allocation size");
 #define	INT_MASK_BUSY	(1 << 4)
 #define	INT_MASK_TXC	(1 << 5) /* transmit control frame */
 #define	INT_MASK_RXC	(1 << 6) /* receive control frame */
+#define INT_MASK_LINK	(1 << 7) /* link change */
 
 #define	INT_MASK_TX	(INT_MASK_TXF | INT_MASK_TXE)
 #define	INT_MASK_RX	(INT_MASK_RXF | INT_MASK_RXE)
@@ -89,7 +90,7 @@ MODULE_PARM_DESC(buffer_size, "DMA buffer allocation size");
 		INT_MASK_TXF | INT_MASK_TXE | \
 		INT_MASK_RXF | INT_MASK_RXE | \
 		INT_MASK_TXC | INT_MASK_RXC | \
-		INT_MASK_BUSY \
+		INT_MASK_BUSY | INT_MASK_LINK \
 	)
 
 /* packet length register */
@@ -230,6 +231,7 @@ struct ethoc {
 
 	int if_type;
 
+	int reported_link;
 };
 
 /* Debug level */
@@ -596,7 +598,7 @@ static irqreturn_t ethoc_interrupt(int irq, void *dev_id)
 	}
 
 	/* Handle receive/transmit event by switching to polling */
-	if (pending & (INT_MASK_TX | INT_MASK_RX)) {
+	if (pending & (INT_MASK_TX | INT_MASK_RX | INT_MASK_LINK)) {
 		ethoc_disable_irq(priv, INT_MASK_TX | INT_MASK_RX);
 		napi_schedule(&priv->napi);
 	}
@@ -628,7 +630,7 @@ static int ethoc_poll(struct napi_struct *napi, int budget)
 	struct ethoc *priv = container_of(napi, struct ethoc, napi);
 	int rx_work_done = 0;
 	int tx_work_done = 0;
-
+	
 	rx_work_done = ethoc_rx(priv->netdev, budget);
 	tx_work_done = ethoc_tx(priv->netdev, budget);
 
@@ -636,7 +638,14 @@ static int ethoc_poll(struct napi_struct *napi, int budget)
 		napi_complete(napi);
 		ethoc_enable_irq(priv, INT_MASK_TX | INT_MASK_RX);
 	}
-
+	if (!priv->phy) {
+		u32 link_state = !(ethoc_read(priv, MIISTATUS) & MIISTATUS_LINKFAIL);
+		if (priv->reported_link != link_state) {
+			priv->reported_link = link_state;
+			if (netif_msg_link(priv))
+				netdev_info(priv->netdev, "Link is %s", link_state ? "UP" : "DOWN");
+		}
+	}
 	return rx_work_done;
 }
 
@@ -694,6 +703,17 @@ static int ethoc_mdio_reset(struct mii_bus *bus)
 
 static void ethoc_mdio_poll(struct net_device *dev)
 {
+	struct ethoc *priv = netdev_priv(dev);
+	struct phy_device *phydev = priv->phy;
+	int status_change = 0;
+	
+	if (priv->reported_link != phydev->link) {
+		priv->reported_link = phydev->link;
+		status_change = 1;
+	}
+
+	if (status_change && netif_msg_link(priv))
+		phy_print_status(phydev);
 }
 
 
