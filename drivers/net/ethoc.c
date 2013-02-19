@@ -643,7 +643,11 @@ static int ethoc_poll(struct napi_struct *napi, int budget)
 		if (priv->reported_link != link_state) {
 			priv->reported_link = link_state;
 			if (netif_msg_link(priv))
-				netdev_info(priv->netdev, "Link is %s", link_state ? "UP" : "DOWN");
+				netdev_info(priv->netdev, "Link is %s\n", link_state ? "UP" : "DOWN");
+			if (link_state)
+				netif_carrier_on(priv->netdev);
+			else
+				netif_carrier_off(priv->netdev);
 		}
 	}
 	return rx_work_done;
@@ -1179,6 +1183,7 @@ static int __devinit ethoc_probe_common(struct platform_device *pdev, enum ethoc
 	priv->dma_alloc = 0;
 	priv->io_region_size = resource_size(mmio);
 	priv->if_type = type;
+	priv->reported_link = 0;
 
 	priv->iobase = devm_ioremap_nocache(&pdev->dev, netdev->base_addr,
 			resource_size(mmio));
