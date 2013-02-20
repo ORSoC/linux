@@ -644,10 +644,12 @@ static int ethoc_poll(struct napi_struct *napi, int budget)
 			priv->reported_link = link_state;
 			if (netif_msg_link(priv))
 				netdev_info(priv->netdev, "Link is %s\n", link_state ? "UP" : "DOWN");
-			if (link_state)
+			if (link_state && priv->netdev->dev_addr) {
+				ethoc_get_mac_address(priv->netdev, priv->netdev->dev_addr);
 				netif_carrier_on(priv->netdev);
-			else
+			} else {
 				netif_carrier_off(priv->netdev);
+			}
 		}
 	}
 	return rx_work_done;
@@ -1349,7 +1351,9 @@ static int __devinit ethoc_probe_common(struct platform_device *pdev, enum ethoc
 
 	/* setup the net_device structure */
 	netdev->netdev_ops = &ethoc_netdev_ops;
-	SET_ETHTOOL_OPS(netdev, &netdev_ethtool_ops);
+	if (priv->mdio) {
+		SET_ETHTOOL_OPS(netdev, &netdev_ethtool_ops);
+	}
 	netdev->watchdog_timeo = ETHOC_TIMEOUT;
 	netdev->features |= 0;
 
