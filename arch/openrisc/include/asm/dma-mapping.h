@@ -169,7 +169,7 @@ static inline void dma_sync_single_for_device(struct device *dev,
 static inline int dma_supported(struct device *dev, u64 dma_mask)
 {
 	/* Support 32 bit DMA mask exclusively */
-	return dma_mask == 0xffffffffULL;
+	return dma_mask == DMA_BIT_MASK(32);
 }
 
 static inline int dma_mapping_error(struct device *dev, dma_addr_t dma_addr)
