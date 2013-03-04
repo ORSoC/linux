@@ -380,7 +380,10 @@ static int ethoc_reset(struct ethoc *dev)
 	mode = ethoc_read(dev, MODER);
 	mode |= MODER_FULLD;
 	ethoc_write(dev, MODER, mode);
-	ethoc_write(dev, IPGT, 0x15);
+	if (dev->if_type == ETHOC_DEVTYPE_TOKENBUS)
+		ethoc_write(dev, IPGT, 0x7f);
+	else
+		ethoc_write(dev, IPGT, 0x15);
 
 	ethoc_ack_irq(dev, INT_MASK_ALL);
 	ethoc_enable_irq(dev, INT_MASK_ALL);
