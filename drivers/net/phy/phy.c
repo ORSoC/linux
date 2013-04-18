@@ -867,7 +867,8 @@ void phy_state_machine(struct work_struct *work)
 				netif_carrier_on(phydev->attached_dev);
 			} else {
 				if (0 == phydev->link_timeout--) {
-					phy_force_reduction(phydev);
+					if (AUTONEG_DISABLE != phydev->autoneg)
+						phy_force_reduction(phydev);
 					needs_aneg = 1;
 				}
 			}
