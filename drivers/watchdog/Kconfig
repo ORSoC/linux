@@ -1025,7 +1025,13 @@ config LANTIQ_WDT
 	help
 	  Hardware driver for the Lantiq SoC Watchdog Timer.
 
+# OpenRISC Architecture
+config ORDB2_WDT
 # PARISC Architecture
+	tristate "ORDB2 Watchdog Timer"
+	depends on OPENRISC && WATCHDOG_CORE
+	---help---
+	  Watchdog timer found in ORDB2 FPGA board.
 
 # POWERPC Architecture
 

@@ -22,7 +22,7 @@ void machine_restart(char *cmd)
 	local_irq_disable();
 	if (ordb2_reset) {
 		printk(KERN_INFO "Rebooting..\n");
-		*ordb2_reset = 1;
+		*ordb2_reset = 1 << 0;
 	}
 	wmb();
 	printk(KERN_INFO "*** MACHINE RESTART ***\n");
@@ -40,7 +40,10 @@ void machine_halt(void)
 	local_irq_disable();
 	printk(KERN_INFO "*** MACHINE HALT ***\n");
 	__asm__("l.nop 1");
-	while(1);
+	while(1) {
+		if (ordb2_reset)
+			*ordb2_reset = 1 << 2;
+	}
 }
 
 /* If or when software power-off is implemented, add code here.  */
@@ -51,7 +54,7 @@ void machine_power_off(void)
 	__asm__("l.nop 1");
 	if (ordb2_reset) {
 		printk(KERN_INFO "Resetting the FPGA..\n");
-		*ordb2_reset = 2;
+		*ordb2_reset = 1 << 1;
 	}
 	while(1);
 }
