@@ -837,6 +837,11 @@ static int ethoc_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		return -EINVAL;
 	}
 
+
+	if (cmd == SIOCDEVPRIVATE) {
+	   return ethoc_get_mac_address(dev, dev->dev_addr);
+	}
+
 	if (!priv->mdio)
 		return -EINVAL;
 
