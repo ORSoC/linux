@@ -383,6 +383,15 @@ config LEDS_ASIC3
 	  cannot be used. This driver supports hardware blinking with an on+off
 	  period from 62ms to 125s. Say Y to enable LEDs on the HP iPAQ hx4700.
 
+config LEDS_ORDB2
+	bool "LED support for the ORSoC quadmac board"
+	depends on LEDS_CLASS
+	depends on OPENRISC
+	default y
+	help
+	  This option enables support for the LEDs on the quadmac board
+	  designed by ORSoC
+
 config LEDS_TRIGGERS
 	bool "LED Trigger support"
 	depends on LEDS_CLASS
