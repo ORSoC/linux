@@ -864,6 +864,7 @@ _work_pending:
  * must be set so that the syscall restart functionality works.
  */
 _work_notifysig:
+	ENABLE_INTERRUPTS(r29)
 	l.jal	do_notify_resume
 	 l.ori	r3,r1,0		  /* pt_regs */
 
