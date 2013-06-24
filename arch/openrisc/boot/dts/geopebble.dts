@@ -45,7 +45,7 @@
 	serial1: serial@91000000 {
 		compatible = "opencores,uart16550-rtlsvn105", "ns16550a";
 		reg = <0x91000000 0x100>;
-		interrupts = <2>;
+		interrupts = <3>;
 		clock-frequency = <50000000>;
 	};
 
