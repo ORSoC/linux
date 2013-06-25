@@ -54,18 +54,30 @@
 		reg = <0xa0000000 0x8>;
 		reg-shift = <0>;        /* 8 bit registers */
 		interrupts = <14>;
-		clock-frequency = <50000000>;
+		clock-frequency = <400000>;
 		#address-cells = <1>;
 		#size-cells = <0>;
+		env_sensor@27 {
+			compatible = "honeywell,hih6130";
+			reg = <0x27>;
+		};
         };
         i2c@a1000000 {
 		compatible = "opencores,i2c-ocores";
 		reg = <0xa1000000 0x8>;
 		reg-shift = <0>;        /* 8 bit registers */
 		interrupts = <15>;
-		clock-frequency = <50000000>;
+		clock-frequency = <400000>;
 		#address-cells = <1>;
 		#size-cells = <0>;
+		acceleometer@19 {
+			compatible = "stm,lsm303dlhc";
+			reg = <0x19>;
+		};
+		magnetometer@1e {
+			compatible = "stm,lsm303dlhc";
+			reg = <0x1e>;
+		};
         };
 
         spi@b0000000 {
@@ -74,6 +86,13 @@
 		interrupts = <7>;
 		#address-cells = <1>;
 		#size-cells = <0>;
+		adc@0 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			spi-max-frequency = <5000000>;	/* 1/10 of specified max (50ns). Not sure on board signal quality */
+			compatible = "maxim,max11040k";
+			reg = <0>;
+		};
         };
 
         spi@b1000000 {
@@ -82,6 +101,34 @@
 		interrupts = <8>;
 		#address-cells = <1>;
 		#size-cells = <0>;
+		pga@0 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			spi-max-frequency = <5000000>;
+			compatible = "maxim,max9939";
+			reg = <0>;
+		};
+		pga@1 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			spi-max-frequency = <5000000>; 
+			compatible = "maxim,max9939";
+			reg = <1>;
+		};
+		pga@2 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			spi-max-frequency = <5000000>;
+			compatible = "maxim,max9939";
+			reg = <2>;
+		};
+		pga@3 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			spi-max-frequency = <5000000>;
+			compatible = "maxim,max9939";
+			reg = <3>;
+		};
         };
 
         spi@b2000000 {
@@ -90,6 +137,13 @@
 		interrupts = <9>;
 		#address-cells = <1>;
 		#size-cells = <0>;
+		oled@0 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			spi-max-frequency = <3300000>;
+			compatible = "newhaven,nhd‐0216kzw‐ab5";
+			reg = <0>;
+		};
         };
 
         spi@b3000000 {
@@ -98,7 +152,12 @@
 		interrupts = <10>;
 		#address-cells = <1>;
 		#size-cells = <0>;
+		wifi@0 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			spi-max-frequency = <33000000>;
+			compatible = "????";
+			reg = <0>;
+		};
         };
-
-
 };
