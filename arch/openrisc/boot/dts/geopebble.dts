@@ -71,11 +71,11 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		accelerometer@19 {	/* U10, Linear acceleration digital interface */
-			compatible = "stm,lsm303dlhc";
+			compatible = "stm,lsm303dlhc_accel";
 			reg = <0x19>;
 		};
 		magnetometer@1e {	/* U10, Magnetic field digital interface */
-			compatible = "stm,lsm303dlhc";
+			compatible = "stm,lsm303dlhc_magn";
 			reg = <0x1e>;
 		};
         };
