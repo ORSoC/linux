@@ -47,4 +47,38 @@
 		reg = <0x92000000 0x100>;
 		interrupts = <4>;
 	};
+
+        spi0: spi@b0000000 {
+		compatible = "opencores,spi-simple";
+		reg = <0xb0000000 0x4>;
+		interrupts = <6>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		flash@0 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			spi-max-frequency = <33000000>;
+			compatible = "stm,m25p80";
+			reg = <0>;
+			partition@fpga {
+				label = "fpga";
+				reg = <0x000000 0x0b4000>;
+			};
+			partition@ubootenv {
+				label = "ubootenv";
+				reg = <0x0b4000 0x004000>;
+			};
+			partition@uboot {
+				label = "uboot";
+				reg = <0x0c0000 0x040000>;
+			};
+/* No space for Linux in ordb2a flash. Following is suitable for 8MB version
+			partition@linux {
+				label = "linux";
+				reg = <0x100000 0x700000>;
+			};
+*/
+		};
+        };
+
 };
