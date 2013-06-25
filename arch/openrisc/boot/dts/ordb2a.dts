@@ -62,11 +62,11 @@
 			reg = <0>;
 			partition@fpga {
 				label = "fpga";
-				reg = <0x000000 0x0b4000>;
+				reg = <0x000000 0x0b0000>;
 			};
 			partition@ubootenv {
 				label = "ubootenv";
-				reg = <0x0b4000 0x004000>;
+				reg = <0x0b0000 0x010000>;
 			};
 			partition@uboot {
 				label = "uboot";
