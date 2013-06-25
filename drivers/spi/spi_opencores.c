@@ -43,7 +43,7 @@
 #define OCSPI_SPSR_WCOL			(1 << 6)
 #define OCSPI_SPSR_WFFULL		(1 << 3)
 #define OCSPI_SPSR_WFEMPTY		(1 << 2)
-#define OCSPI_SPSR_RFFUL		(1 << 1)
+#define OCSPI_SPSR_RFFULL		(1 << 1)
 #define OCSPI_SPSR_RFEMPTY		(1 << 0)
 
 #define OCSPI_SPER_ICNT			0xc0
