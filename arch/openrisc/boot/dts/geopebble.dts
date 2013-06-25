@@ -57,7 +57,7 @@
 		clock-frequency = <400000>;
 		#address-cells = <1>;
 		#size-cells = <0>;
-		env_sensor@27 {
+		env_sensor@27 {	 /* U9 */
 			compatible = "honeywell,hih6130";
 			reg = <0x27>;
 		};
@@ -70,11 +70,11 @@
 		clock-frequency = <400000>;
 		#address-cells = <1>;
 		#size-cells = <0>;
-		acceleometer@19 {
+		accelerometer@19 {	/* U10, Linear acceleration digital interface */
 			compatible = "stm,lsm303dlhc";
 			reg = <0x19>;
 		};
-		magnetometer@1e {
+		magnetometer@1e {	/* U10, Magnetic field digital interface */
 			compatible = "stm,lsm303dlhc";
 			reg = <0x1e>;
 		};
@@ -101,28 +101,28 @@
 		interrupts = <8>;
 		#address-cells = <1>;
 		#size-cells = <0>;
-		pga@0 {
+		pga@0 {		/* U2 */
 			#address-cells = <1>;
 			#size-cells = <1>;
 			spi-max-frequency = <5000000>;
 			compatible = "maxim,max9939";
 			reg = <0>;
 		};
-		pga@1 {
+		pga@1 {		/* U4 */
 			#address-cells = <1>;
 			#size-cells = <1>;
 			spi-max-frequency = <5000000>; 
 			compatible = "maxim,max9939";
 			reg = <1>;
 		};
-		pga@2 {
+		pga@2 {		/* U6 */
 			#address-cells = <1>;
 			#size-cells = <1>;
 			spi-max-frequency = <5000000>;
 			compatible = "maxim,max9939";
 			reg = <2>;
 		};
-		pga@3 {
+		pga@3 {		/* U8 */
 			#address-cells = <1>;
 			#size-cells = <1>;
 			spi-max-frequency = <5000000>;
