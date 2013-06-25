@@ -19,9 +19,12 @@
 #include <linux/mii.h>
 #include <linux/phy.h>
 #include <linux/platform_device.h>
+#include <linux/ethtool.h>
+#include <linux/etherdevice.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/of.h>
+#include <linux/module.h>
 #include <net/ethoc.h>
 
 static int buffer_size = 0x20000; /* 128 KBytes */
@@ -216,7 +219,15 @@ struct ethoc {
 	struct phy_device *phy;
 	struct mii_bus *mdio;
 	s8 phy_id;
+
+	struct mutex mulock;
+	struct mii_if_info mii_if;
 };
+
+/* Debug level */
+int debug = -1;
+module_param(debug, int, 0);
+MODULE_PARM_DESC(debug, "Debug verbosity level (0=none, ..., ffff=all)");
 
 /**
  * struct ethoc_bd - buffer descriptor
@@ -258,6 +269,7 @@ static inline void ethoc_write_bd(struct ethoc *dev, int index,
 		const struct ethoc_bd *bd)
 {
 	loff_t offset = ETHOC_BD_BASE + (index * sizeof(struct ethoc_bd));
+	/* should reverse this order since stat is used to hand over BD to MAC */
 	ethoc_write(dev, offset + 0, bd->stat);
 	ethoc_write(dev, offset + 4, bd->addr);
 }
@@ -562,9 +574,8 @@ static irqreturn_t ethoc_interrupt(int irq, void *dev_id)
 	pending = ethoc_read(priv, INT_SOURCE);
 	pending &= mask;
 
-	if (unlikely(pending == 0)) {
+	if (unlikely(pending == 0))
 		return IRQ_NONE;
-	}
 
 	ethoc_ack_irq(priv, pending);
 
@@ -615,13 +626,11 @@ static int ethoc_poll(struct napi_struct *napi, int budget)
 		napi_complete(napi);
 		ethoc_enable_irq(priv, INT_MASK_TX | INT_MASK_RX);
 	}
-
 	return rx_work_done;
 }
 
-static int ethoc_mdio_read(struct mii_bus *bus, int phy, int reg)
+static int ethoc_mdio_read(struct ethoc *priv, int phy, int reg)
 {
-	struct ethoc *priv = bus->priv;
 	int i;
 
 	ethoc_write(priv, MIIADDRESS, MIIADDRESS_ADDR(phy, reg));
@@ -641,9 +650,18 @@ static int ethoc_mdio_read(struct mii_bus *bus, int phy, int reg)
 	return -EBUSY;
 }
 
-static int ethoc_mdio_write(struct mii_bus *bus, int phy, int reg, u16 val)
+static int ethoc_mdio_read_mii(struct net_device *dev, int phy, int reg)
 {
-	struct ethoc *priv = bus->priv;
+	return ethoc_mdio_read(netdev_priv(dev), phy, reg);
+}
+
+static int ethoc_mdio_read_phylib(struct mii_bus *bus, int phy, int reg)
+{
+	return ethoc_mdio_read(bus->priv, phy, reg);
+}
+
+static int ethoc_mdio_write(struct ethoc *priv, int phy, int reg, u16 val)
+{
 	int i;
 
 	ethoc_write(priv, MIIADDRESS, MIIADDRESS_ADDR(phy, reg));
@@ -663,6 +681,16 @@ static int ethoc_mdio_write(struct mii_bus *bus, int phy, int reg, u16 val)
 	return -EBUSY;
 }
 
+static void ethoc_mdio_write_mii(struct net_device *dev, int phy, int reg, int val)
+{
+	ethoc_mdio_write(netdev_priv(dev), phy, reg, val);
+}
+
+static int ethoc_mdio_write_phylib(struct mii_bus *bus, int phy, int reg, u16 val)
+{
+	return ethoc_mdio_write(bus->priv, phy, reg, val);
+}
+
 static int ethoc_mdio_reset(struct mii_bus *bus)
 {
 	return 0;
@@ -678,11 +706,10 @@ static int __devinit ethoc_mdio_probe(struct net_device *dev)
 	struct phy_device *phy;
 	int err;
 
-	if (priv->phy_id != -1) {
+	if (priv->phy_id != -1)
 		phy = priv->mdio->phy_map[priv->phy_id];
-	} else {
+	else
 		phy = phy_find_first(priv->mdio);
-	}
 
 	if (!phy) {
 		dev_err(&dev->dev, "no PHY found\n");
@@ -724,10 +751,9 @@ static int ethoc_open(struct net_device *dev)
 	phy_start(priv->phy);
 	napi_enable(&priv->napi);
 
-	if (netif_msg_ifup(priv)) {
+	if (netif_msg_ifup(priv))
 		dev_info(&dev->dev, "I/O: %08lx Memory: %08lx-%08lx\n",
 				dev->base_addr, dev->mem_start, dev->mem_end);
-	}
 
 	return 0;
 }
@@ -759,6 +785,9 @@ static int ethoc_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	if (!netif_running(dev))
 		return -EINVAL;
 
+	if (!priv->mdio)
+		return -EINVAL;
+
 	if (cmd != SIOCGMIIPHY) {
 		if (mdio->phy_id >= PHY_MAX_ADDR)
 			return -ERANGE;
@@ -778,10 +807,15 @@ static int ethoc_config(struct net_device *dev, struct ifmap *map)
 	return -ENOSYS;
 }
 
-static int ethoc_set_mac_address(struct net_device *dev, void *addr)
+static int ethoc_set_mac_address(struct net_device *dev, void *p)
 {
+	struct sockaddr *addr = p;
 	struct ethoc *priv = netdev_priv(dev);
-	u8 *mac = (u8 *)addr;
+	u8 *mac = (u8 *)addr->sa_data;
+
+	if (!is_valid_ether_addr(addr->sa_data))
+		return -EADDRNOTAVAIL;
+	memcpy(dev->dev_addr, mac, ETH_ALEN);
 
 	ethoc_write(priv, MAC_ADDR0, (mac[2] << 24) | (mac[3] << 16) |
 				     (mac[4] <<  8) | (mac[5] <<  0));
@@ -863,6 +897,7 @@ static netdev_tx_t ethoc_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	priv->cur_tx++;
 
 	ethoc_read_bd(priv, entry, &bd);
+	/* Unnecessary test - PAD flag does no harm if packet is large enough */
 	if (unlikely(skb->len < ETHOC_ZLEN))
 		bd.stat |=  TX_BD_PAD;
 	else
@@ -875,6 +910,7 @@ static netdev_tx_t ethoc_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	bd.stat |= TX_BD_LEN(skb->len);
 	ethoc_write_bd(priv, entry, &bd);
 
+	/* unnecessary two step write - READY should already be cleared given a free bd */
 	bd.stat |= TX_BD_READY;
 	ethoc_write_bd(priv, entry, &bd);
 
@@ -889,6 +925,116 @@ out:
 	dev_kfree_skb(skb);
 	return NETDEV_TX_OK;
 }
+
+/*
+ * ethtool support
+ */
+
+#define ADVERTISED_ALL			\
+	(ADVERTISED_10baseT_Half |	\
+	ADVERTISED_10baseT_Full |	\
+	ADVERTISED_100baseT_Half |	\
+	ADVERTISED_100baseT_Full)
+
+/* These functions use the MII functions in mii.c. */
+
+static int ethtool_get_settings(struct net_device *dev, struct ethtool_cmd *cmd)
+{
+	struct ethoc *priv = netdev_priv(dev);
+
+	mutex_lock(&priv->mulock);
+	mii_ethtool_gset(&priv->mii_if, cmd);
+	mutex_unlock(&priv->mulock);
+	return 0;
+}
+
+static int ethtool_set_settings(struct net_device *dev, struct ethtool_cmd *cmd)
+{
+	struct ethoc *priv = netdev_priv(dev);
+	int rc;
+
+	mutex_lock(&priv->mulock);
+	rc = mii_ethtool_sset(&priv->mii_if, cmd);
+	mutex_unlock(&priv->mulock);
+	return rc;
+}
+
+static int ethtool_nway_reset(struct net_device *dev)
+{
+	struct ethoc *priv = netdev_priv(dev);
+	int rc;
+
+	mutex_lock(&priv->mulock);
+	rc = mii_nway_restart(&priv->mii_if);
+	mutex_unlock(&priv->mulock);
+	return rc;
+}
+
+static u32 ethtool_get_link(struct net_device *dev)
+{
+	struct ethoc *priv = netdev_priv(dev);
+	int rc;
+
+	rc = mii_link_ok(&priv->mii_if);
+
+	return rc;
+}
+
+static void ethtool_get_drvinfo(struct net_device *dev,
+	struct ethtool_drvinfo *info)
+{
+
+	strcpy(info->driver, "OpenCores Ethernet MAC driver");
+	strcpy(info->version, "0.9");
+	strcpy(info->bus_info, "Wishbone Bus");
+}
+
+static int ethtool_get_regs_len(struct net_device *dev)
+{
+	return (0x1F +1)*4;
+}
+
+static void ethtool_get_regs(struct net_device *dev, struct ethtool_regs *regs,
+	void *ptr)
+{
+	struct ethoc *priv = netdev_priv(dev);
+	int *buf = (int *) ptr;
+	int len;
+
+	mutex_lock(&priv->mulock);
+	regs->version = 0;
+	for (len = 0; len <= 0x1F; len++) {
+		*buf=ethoc_mdio_read(priv, 0, len);
+		buf++;
+	}
+	mutex_unlock(&priv->mulock);
+}
+
+static u32 ethtool_get_msglevel(struct net_device *dev)
+{
+	struct ethoc *priv = netdev_priv(dev);
+
+	return priv->msg_enable;
+}
+
+static void ethtool_set_msglevel(struct net_device *dev, u32 value)
+{
+	struct ethoc *priv = netdev_priv(dev);
+
+	priv->msg_enable = value;
+}
+
+static struct ethtool_ops netdev_ethtool_ops = {
+	.get_settings		= ethtool_get_settings,
+	.set_settings		= ethtool_set_settings,
+	.nway_reset		= ethtool_nway_reset,
+	.get_link		= ethtool_get_link,
+	.get_drvinfo		= ethtool_get_drvinfo,
+	.get_regs_len		= ethtool_get_regs_len,
+	.get_regs		= ethtool_get_regs,
+	.get_msglevel		= ethtool_get_msglevel,
+	.set_msglevel		= ethtool_set_msglevel,
+};
 
 static const struct net_device_ops ethoc_netdev_ops = {
 	.ndo_open = ethoc_open,
@@ -914,6 +1060,7 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 	struct resource *mem = NULL;
 	struct ethoc *priv = NULL;
 	unsigned int phy;
+	struct sockaddr saddr;
 	int num_bd;
 	int ret = 0;
 
@@ -1039,14 +1186,16 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 		priv->phy_id = pdata->phy_id;
 	} else {
 		priv->phy_id = -1;
-
 #ifdef CONFIG_OF
 		{
+		const char *ascid;
+		char *ascid2;
 		const uint8_t* mac;
 
 		mac = of_get_property(pdev->dev.of_node,
 				      "local-mac-address",
 				      NULL);
+
 		/* Better approach:
 		#include <linux/of_net.h>
 		mac = of_get_mac_address(pdev->dev.of_node);
@@ -1065,10 +1214,15 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 
 	/* Check the MAC again for validity, if it still isn't choose and
 	 * program a random one. */
-	if (!is_valid_ether_addr(netdev->dev_addr))
+	if (!is_valid_ether_addr(netdev->dev_addr)) {
+		printk("Assigning random MAC");
 		random_ether_addr(netdev->dev_addr);
+	}
 
-	ethoc_set_mac_address(netdev, netdev->dev_addr);
+	memcpy(netdev->perm_addr,netdev->dev_addr,IFHWADDRLEN);
+	memcpy(&saddr.sa_data,netdev->dev_addr,sizeof(saddr.sa_data));
+
+	ethoc_set_mac_address(netdev, &saddr);
 
 	/* register MII bus */
 	priv->mdio = mdiobus_alloc();
@@ -1078,10 +1232,9 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 	}
 
 	priv->mdio->name = "ethoc-mdio";
-	snprintf(priv->mdio->id, MII_BUS_ID_SIZE, "%s-%d",
-			priv->mdio->name, pdev->id);
-	priv->mdio->read = ethoc_mdio_read;
-	priv->mdio->write = ethoc_mdio_write;
+	snprintf(priv->mdio->id, MII_BUS_ID_SIZE, "1");
+	priv->mdio->read = ethoc_mdio_read_phylib;
+	priv->mdio->write = ethoc_mdio_write_phylib;
 	priv->mdio->reset = ethoc_mdio_reset;
 	priv->mdio->priv = priv;
 
@@ -1106,10 +1259,24 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 		goto error;
 	}
 
+	priv->mii_if.phy_id_mask = 0x1F;
+	priv->mii_if.reg_num_mask = 0x1F;
+	priv->mii_if.dev = netdev;
+	priv->mii_if.mdio_read = ethoc_mdio_read_mii;
+	priv->mii_if.mdio_write = ethoc_mdio_write_mii;
+	priv->mii_if.phy_id = 0; //priv->phy_id;
+
+	priv->msg_enable = netif_msg_init(debug,
+		(NETIF_MSG_DRV | NETIF_MSG_PROBE | NETIF_MSG_LINK));
+
+	mutex_init(&priv->mulock);
+
 	ether_setup(netdev);
 
 	/* setup the net_device structure */
 	netdev->netdev_ops = &ethoc_netdev_ops;
+	if (priv->mdio)
+		SET_ETHTOOL_OPS(netdev, &netdev_ethtool_ops);
 	netdev->watchdog_timeo = ETHOC_TIMEOUT;
 	netdev->features |= 0;
 
@@ -1123,6 +1290,9 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 		dev_err(&netdev->dev, "failed to register interface\n");
 		goto error2;
 	}
+
+	/* Default link down until link detection kicks in */
+	netif_carrier_off(netdev);
 
 	goto out;
 
