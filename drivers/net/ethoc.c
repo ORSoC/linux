@@ -208,7 +208,7 @@ struct ethoc {
 	unsigned int num_rx;
 	unsigned int cur_rx;
 
-	void** vma;
+	void **vma;
 
 	struct net_device *netdev;
 	struct napi_struct napi;
@@ -311,7 +311,7 @@ static int ethoc_init_ring(struct ethoc *dev, unsigned long mem_start)
 {
 	struct ethoc_bd bd;
 	int i;
-	void* vma;
+	void *vma;
 
 	dev->cur_tx = 0;
 	dev->dty_tx = 0;
@@ -636,7 +636,7 @@ static int ethoc_mdio_read(struct ethoc *priv, int phy, int reg)
 	ethoc_write(priv, MIIADDRESS, MIIADDRESS_ADDR(phy, reg));
 	ethoc_write(priv, MIICOMMAND, MIICOMMAND_READ);
 
-	for (i=0; i < 5; i++) {
+	for (i = 0; i < 5; i++) {
 		u32 status = ethoc_read(priv, MIISTATUS);
 		if (!(status & MIISTATUS_BUSY)) {
 			u32 data = ethoc_read(priv, MIIRX_DATA);
@@ -644,7 +644,7 @@ static int ethoc_mdio_read(struct ethoc *priv, int phy, int reg)
 			ethoc_write(priv, MIICOMMAND, 0);
 			return data;
 		}
-		usleep_range(100,200);
+		usleep_range(100, 200);
 	}
 
 	return -EBUSY;
@@ -668,14 +668,14 @@ static int ethoc_mdio_write(struct ethoc *priv, int phy, int reg, u16 val)
 	ethoc_write(priv, MIITX_DATA, val);
 	ethoc_write(priv, MIICOMMAND, MIICOMMAND_WRITE);
 
-	for (i=0; i < 5; i++) {
+	for (i = 0; i < 5; i++) {
 		u32 stat = ethoc_read(priv, MIISTATUS);
 		if (!(stat & MIISTATUS_BUSY)) {
 			/* reset MII command register */
 			ethoc_write(priv, MIICOMMAND, 0);
 			return 0;
 		}
-		usleep_range(100,200);
+		usleep_range(100, 200);
 	}
 
 	return -EBUSY;
@@ -807,20 +807,24 @@ static int ethoc_config(struct net_device *dev, struct ifmap *map)
 	return -ENOSYS;
 }
 
-static int ethoc_set_mac_address(struct net_device *dev, void *p)
+static void ethoc_do_set_mac_address(struct net_device *dev)
 {
-	struct sockaddr *addr = p;
 	struct ethoc *priv = netdev_priv(dev);
-	u8 *mac = (u8 *)addr->sa_data;
-
-	if (!is_valid_ether_addr(addr->sa_data))
-		return -EADDRNOTAVAIL;
-	memcpy(dev->dev_addr, mac, ETH_ALEN);
+	unsigned char *mac = dev->dev_addr;
 
 	ethoc_write(priv, MAC_ADDR0, (mac[2] << 24) | (mac[3] << 16) |
 				     (mac[4] <<  8) | (mac[5] <<  0));
 	ethoc_write(priv, MAC_ADDR1, (mac[0] <<  8) | (mac[1] <<  0));
+}
 
+static int ethoc_set_mac_address(struct net_device *dev, void *p)
+{
+	const struct sockaddr *addr = p;
+
+	if (!is_valid_ether_addr(addr->sa_data))
+		return -EADDRNOTAVAIL;
+	memcpy(dev->dev_addr, addr->sa_data, ETH_ALEN);
+	ethoc_do_set_mac_address(dev);
 	return 0;
 }
 
@@ -1060,14 +1064,13 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 	struct resource *mem = NULL;
 	struct ethoc *priv = NULL;
 	unsigned int phy;
-	struct sockaddr saddr;
 	int num_bd;
 	int ret = 0;
+	bool random_mac = false;
 
 	/* allocate networking device */
 	netdev = alloc_etherdev(sizeof(struct ethoc));
 	if (!netdev) {
-		dev_err(&pdev->dev, "cannot allocate network device\n");
 		ret = -ENOMEM;
 		goto out;
 	}
@@ -1173,7 +1176,7 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 	dev_dbg(&pdev->dev, "ethoc: num_tx: %d num_rx: %d\n",
 		priv->num_tx, priv->num_rx);
 
-	priv->vma = devm_kzalloc(&pdev->dev, num_bd*sizeof(void*), GFP_KERNEL);
+	priv->vma = devm_kzalloc(&pdev->dev, num_bd*sizeof(void *), GFP_KERNEL);
 	if (!priv->vma) {
 		ret = -ENOMEM;
 		goto error;
@@ -1186,16 +1189,14 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 		priv->phy_id = pdata->phy_id;
 	} else {
 		priv->phy_id = -1;
+
 #ifdef CONFIG_OF
 		{
-		const char *ascid;
-		char *ascid2;
-		const uint8_t* mac;
+		const uint8_t *mac;
 
 		mac = of_get_property(pdev->dev.of_node,
 				      "local-mac-address",
 				      NULL);
-
 		/* Better approach:
 		#include <linux/of_net.h>
 		mac = of_get_mac_address(pdev->dev.of_node);
@@ -1208,21 +1209,24 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 	}
 
 	/* Check that the given MAC address is valid. If it isn't, read the
-	 * current MAC from the controller. */
+	 * current MAC from the controller.
+	 */
 	if (!is_valid_ether_addr(netdev->dev_addr))
 		ethoc_get_mac_address(netdev, netdev->dev_addr);
 
 	/* Check the MAC again for validity, if it still isn't choose and
-	 * program a random one. */
+	 * program a random one.
+	 */
 	if (!is_valid_ether_addr(netdev->dev_addr)) {
-		printk("Assigning random MAC");
-		random_ether_addr(netdev->dev_addr);
+		eth_random_addr(netdev->dev_addr);
+		random_mac = true;
 	}
 
 	memcpy(netdev->perm_addr,netdev->dev_addr,IFHWADDRLEN);
-	memcpy(&saddr.sa_data,netdev->dev_addr,sizeof(saddr.sa_data));
+	ethoc_do_set_mac_address(netdev);
 
-	ethoc_set_mac_address(netdev, &saddr);
+	if (random_mac)
+		netdev->addr_assign_type = NET_ADDR_RANDOM;
 
 	/* register MII bus */
 	priv->mdio = mdiobus_alloc();
@@ -1310,7 +1314,7 @@ out:
 }
 
 /**
- * ethoc_remove() - shutdown OpenCores ethernet MAC
+ * ethoc_remove - shutdown OpenCores ethernet MAC
  * @pdev:	platform device
  */
 static int __devexit ethoc_remove(struct platform_device *pdev)
@@ -1386,4 +1390,3 @@ module_exit(ethoc_exit);
 MODULE_AUTHOR("Thierry Reding <thierry.reding@avionic-design.de>");
 MODULE_DESCRIPTION("OpenCores Ethernet MAC driver");
 MODULE_LICENSE("GPL v2");
-
