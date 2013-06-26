@@ -80,6 +80,9 @@
 		};
         };
 
+        // Each SPI device have spidev first to by default address them via /dev/spi*
+        // to avoid sudden change if a driver becomes available.
+
         spi@b0000000 {
 		compatible = "opencores,spi-simple";
 		reg = <0xb0000000 0x4>;
@@ -90,7 +93,7 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			spi-max-frequency = <5000000>;	/* 1/10 of specified max (50ns). Not sure on board signal quality */
-			compatible = "maxim,max11040k";
+			compatible = "spidev maxim,max11040k";
 			reg = <0>;
 		};
         };
@@ -105,28 +108,28 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			spi-max-frequency = <5000000>;
-			compatible = "maxim,max9939";
+			compatible = "spidev maxim,max9939";
 			reg = <0>;
 		};
 		pga@1 {		/* U4 */
 			#address-cells = <1>;
 			#size-cells = <1>;
 			spi-max-frequency = <5000000>; 
-			compatible = "maxim,max9939";
+			compatible = "spidev maxim,max9939";
 			reg = <1>;
 		};
 		pga@2 {		/* U6 */
 			#address-cells = <1>;
 			#size-cells = <1>;
 			spi-max-frequency = <5000000>;
-			compatible = "maxim,max9939";
+			compatible = "spidev maxim,max9939";
 			reg = <2>;
 		};
 		pga@3 {		/* U8 */
 			#address-cells = <1>;
 			#size-cells = <1>;
 			spi-max-frequency = <5000000>;
-			compatible = "maxim,max9939";
+			compatible = "spidev maxim,max9939";
 			reg = <3>;
 		};
         };
@@ -141,7 +144,7 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			spi-max-frequency = <3300000>;
-			compatible = "newhaven,nhd‐0216kzw‐ab5";
+			compatible = "spidev newhaven,nhd‐0216kzw‐ab5";
 			reg = <0>;
 		};
         };
@@ -156,7 +159,8 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			spi-max-frequency = <33000000>;
-			compatible = "????";
+			// Not sure what model the wifi module have
+			compatible = "spidev";
 			reg = <0>;
 		};
         };
