@@ -48,10 +48,10 @@
 		interrupts = <4>;
 	};
 
-        spi0: spi@b0000000 {
-		compatible = "opencores,spi-simple";
-		reg = <0xb0000000 0x4>;
-		interrupts = <6>;
+        spi3: spi@b3000000 {
+		compatible = "opencores,spi";
+		reg = <0xb3000000 0x20>;
+		interrupts = <7>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 		flash@0 {

@@ -25,9 +25,9 @@
 #define wb_ioread16(p) ioread16be(p)
 #define wb_ioread32(p) ioread32be(p)
 
-#define wb_iowrite8(p)  iowrite8(p)
-#define wb_iowrite16(p) iowrite16be(p)
-#define wb_iowrite32(p) iowrite32be(p)
+#define wb_iowrite8(v, p)  iowrite8(v, p)
+#define wb_iowrite16(v, p) iowrite16be(v, p)
+#define wb_iowrite32(v, p) iowrite32be(v, p)
 
 #else
 
@@ -35,9 +35,9 @@
 #define wb_ioread16(p) ioread16(p)
 #define wb_ioread32(p) ioread32(p)
 
-#define wb_iowrite8(p)  iowrite8(p)
-#define wb_iowrite16(p) iowrite16(p)
-#define wb_iowrite32(p) iowrite32(p)
+#define wb_iowrite8(p, v)  iowrite8(p, v)
+#define wb_iowrite16(p, v) iowrite16(p, v)
+#define wb_iowrite32(p, v) iowrite32(p, v)
 
 #endif /* CONFIG_WISHBONE_BIG_ENDIAN */
 
