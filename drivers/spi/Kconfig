@@ -228,6 +228,11 @@ config SPI_OC_TINY
 	help
 	  This is the driver for OpenCores tiny SPI master controller.
 
+config SPI_OCSPI
+	tristate "OpenCores SPI Controller"
+	help
+	  Driver for SPI master core from OpenCores.org 
+
 config SPI_OMAP_UWIRE
 	tristate "OMAP1 MicroWire"
 	depends on ARCH_OMAP1
