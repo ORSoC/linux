@@ -360,6 +360,8 @@ static int __devinit ocspi_probe(struct platform_device *pdev)
 	
 	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_LSB_FIRST; /* SPI_NO_CS? */
 	master->bus_num = pdev->id;
+	if (master->bus_num == -1)
+	       master->bus_num = (memres->start >> 24) & 0x4;
 	master->num_chipselect = OCSPI_NUM_CHIPSELECTS;
 	master->setup = ocspi_setup;
 	master->transfer = ocspi_transfer;
