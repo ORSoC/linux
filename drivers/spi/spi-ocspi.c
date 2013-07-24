@@ -65,6 +65,7 @@ struct ocspi {
 	/* limits */
 	unsigned int		max_speed;
 	unsigned int		min_speed;
+	unsigned int		polled_mode;
 };
 
 static u32
@@ -94,7 +95,7 @@ static void ocspi_set_cs(struct ocspi *hw, int cs, int cs_delay)
 	if (cs && hw->current_cs == cs)
 		return;
 
-	/* deassert any old CS. !cs to reset if hw and internal state mismatch */
+	/* deassert any old CS */
 	if (cs < 0 || hw->current_cs >= 0) {
 		ocspi_write(hw, OCSPI_REG_SS, 0);
 		ndelay(cs_delay);
@@ -215,7 +216,13 @@ static void ocspi_work_one(struct ocspi *hw, struct spi_message *m)
 			ocspi_set_cs(hw, spi->chip_select, cs_delay);
 			ctrl |= OCSPI_CTRL_GO_BSY;
 			ocspi_write(hw, OCSPI_REG_CTRL, ctrl);
-			err = wait_event_interruptible(hw->wait, !ocspi_busy(hw));
+			if (hw->polled_mode) {
+				/* TOOD: Make this interruptible */
+				err = 0;
+				while(ocspi_busy(hw));
+			} else {
+				err = wait_event_interruptible(hw->wait, !ocspi_busy(hw));
+			}
 			if (err)
 				goto out;
 			ocspi_read_rx(hw, &rxbuf, wordlen);
@@ -317,8 +324,7 @@ static int __devinit ocspi_probe(struct platform_device *pdev)
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0) {
-		dev_err(&pdev->dev, "platform_get_irq error\n");
-		return -ENODEV;
+		dev_info(&pdev->dev, "no SPI controller IRQ defined. Using polled mode\n");
 	}
 
 	master = spi_alloc_master(&pdev->dev, sizeof *hw);
@@ -351,17 +357,24 @@ static int __devinit ocspi_probe(struct platform_device *pdev)
 		goto out;
 	}
 	
-	error = devm_request_irq(&pdev->dev, irq, ocspi_interrupt, 0,
-				       pdev->name, hw);
-	if (error < 0) {
-		dev_err(&pdev->dev, "request_irq failed\n");
-		goto out;
+	if (irq >= 0) {
+		error = devm_request_irq(&pdev->dev, irq, ocspi_interrupt, 0,
+					       pdev->name, hw);
+		if (error < 0) {
+			dev_err(&pdev->dev, "request_irq failed\n");
+			goto out;
+		}
+		hw->polled_mode = 0;
+	} else {
+		hw->polled_mode = 1;
 	}
 	
-	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_LSB_FIRST; /* SPI_NO_CS? */
+	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_LSB_FIRST;
 	master->bus_num = pdev->id;
-	if (master->bus_num == -1)
-	       master->bus_num = (memres->start >> 24) & 0x4;
+	if (master->bus_num == -1) {
+		/* Construct bus number based on low bits of base address */
+		master->bus_num = (memres->start >> 24) & 0x4;
+	}
 	master->num_chipselect = OCSPI_NUM_CHIPSELECTS;
 	master->setup = ocspi_setup;
 	master->transfer = ocspi_transfer;
