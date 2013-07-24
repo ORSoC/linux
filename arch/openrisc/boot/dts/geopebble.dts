@@ -92,7 +92,7 @@
         spi@b0000000 {
 		compatible = "opencores,spi";
 		reg = <0xb0000000 0x20>;
-		interrupts = <7>;
+		// interrupts = <7>; /* IRQ disabled to use polled mode */
 		#address-cells = <1>;
 		#size-cells = <0>;
 		adc@4 {
