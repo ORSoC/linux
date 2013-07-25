@@ -122,17 +122,33 @@ static void ocspi_fill_tx(struct ocspi *hw, const void **txbufp, int wordlen)
 	if (txbuf) {
 		if (wordlen == 1)
 			txdata[0] = *(u8 *)txbuf;
-		else if (wordlen == 2)
-			txdata[0] = *(u16 *)txbuf;
-		else
+		else if (wordlen == 2) {
+			u16 t;
+			memcpy(&t, txbuf, wordlen);
+			txdata[0] = t;
+		} else {
 			memcpy(txdata, txbuf, wordlen);
+		}
 		txbuf += wordlen;
 		*txbufp = txbuf;
 	}
-	ocspi_write(hw, OCSPI_REG_DATA0, txdata[0]);
-	ocspi_write(hw, OCSPI_REG_DATA1, txdata[1]);
-	ocspi_write(hw, OCSPI_REG_DATA2, txdata[2]);
-	ocspi_write(hw, OCSPI_REG_DATA3, txdata[3]);
+	switch(wordlen) {
+	case 1:
+	case 2:
+	case 4:
+		ocspi_write(hw, OCSPI_REG_DATA0, txdata[0]);
+		break;
+	case 8:
+		ocspi_write(hw, OCSPI_REG_DATA1, txdata[0]);
+		ocspi_write(hw, OCSPI_REG_DATA0, txdata[1]);
+		break;
+	case 16:
+		ocspi_write(hw, OCSPI_REG_DATA3, txdata[0]);
+		ocspi_write(hw, OCSPI_REG_DATA2, txdata[1]);
+		ocspi_write(hw, OCSPI_REG_DATA1, txdata[2]);
+		ocspi_write(hw, OCSPI_REG_DATA0, txdata[3]);
+		break;
+	}
 }
 
 static void ocspi_read_rx(struct ocspi *hw, void **rxbufp, int wordlen)
@@ -140,17 +156,30 @@ static void ocspi_read_rx(struct ocspi *hw, void **rxbufp, int wordlen)
 	u8 *rxbuf = *rxbufp;
 	u32 rxdata[4];
 
-	rxdata[0] = ocspi_read(hw, OCSPI_REG_DATA0);
-	rxdata[1] = ocspi_read(hw, OCSPI_REG_DATA1);
-	rxdata[2] = ocspi_read(hw, OCSPI_REG_DATA2);
-	rxdata[3] = ocspi_read(hw, OCSPI_REG_DATA3);
+	switch (wordlen) {
+	case 1: case 2: case 4:
+		rxdata[0] = ocspi_read(hw, OCSPI_REG_DATA0);
+		break;
+	case 8:
+		rxdata[0] = ocspi_read(hw, OCSPI_REG_DATA1);
+		rxdata[1] = ocspi_read(hw, OCSPI_REG_DATA0);
+		break;
+	case 16:
+		rxdata[0] = ocspi_read(hw, OCSPI_REG_DATA3);
+		rxdata[1] = ocspi_read(hw, OCSPI_REG_DATA2);
+		rxdata[2] = ocspi_read(hw, OCSPI_REG_DATA1);
+		rxdata[3] = ocspi_read(hw, OCSPI_REG_DATA0);
+		break;
+	}
 	if (rxbuf) {
 		if (wordlen == 1)
 			*(u8 *)rxbuf = rxdata[0];
-		else if (wordlen == 2)
-			*(u16 *)rxbuf = rxdata[0];
-		else
+		else if (wordlen == 2) {
+			u16 t = rxdata[0];
+			memcpy(rxbuf, t, wordlen);
+		} else {
 			memcpy(rxbuf, rxdata, wordlen);
+		}
 		rxbuf += wordlen;
 		*rxbufp = rxbuf;
 	}
