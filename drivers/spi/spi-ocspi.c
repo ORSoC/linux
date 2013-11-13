@@ -176,7 +176,7 @@ static void ocspi_read_rx(struct ocspi *hw, void **rxbufp, int wordlen)
 			*(u8 *)rxbuf = rxdata[0];
 		else if (wordlen == 2) {
 			u16 t = rxdata[0];
-			memcpy(rxbuf, t, wordlen);
+			memcpy(rxbuf, &t, wordlen);
 		} else {
 			memcpy(rxbuf, rxdata, wordlen);
 		}
