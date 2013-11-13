@@ -20,6 +20,7 @@
 #include <linux/spi/spi.h>
 #include <linux/wishbone.h>
 #include <linux/io.h>
+#include <linux/dma-mapping.h>
 #include <asm/cpuinfo.h>
 
 #define DRIVER_NAME			"oc_spi_geopebble"
@@ -34,11 +35,11 @@
 #define OCSPI_REG_DIVIDER		0x14
 #define OCSPI_REG_SS			0x18
 #define OCSPI_REG_DMA_EXECUTE		0x20
-#define OCSPI_REG_DMA_ADDR		0x24
-#define OCSPI_REG_DMA_CNT		0x28
+#define OCSPI_REG_DMA_CURRENT_ADDR	0x24
+#define OCSPI_REG_DMA_CURRENT_CNT	0x28
 #define OCSPI_REG_DMA_CLRIRQ		0x2c
-#define OCSPI_REG_DMA_ADDR2		0x30
-#define OCSPI_REG_DMA_CNT2		0x34
+#define OCSPI_REG_DMA_ADDR		0x30
+#define OCSPI_REG_DMA_CNT		0x34
 
 /* CTRL bits */
 /* word len field is 1-128(0) bits (docs also 64? confusing) */
@@ -51,6 +52,8 @@
 #define OCSPI_CTRL_IE			(1 << 12)
 #define OCSPI_CTRL_ASS			(1 << 13)
 #define OCSPI_CTRL_CPOL			(1 << 14)
+
+#define INVALID_DMA_ADDRESS	0xffffffff
 
 struct ocspi {
 	struct spi_master	*master;
@@ -254,6 +257,122 @@ static int ocspi_work_one_xfr(struct ocspi *hw, struct spi_message *m, struct sp
 	return 0;
 }
 
+/*
+ * For DMA, tx_buf/tx_dma have the same relationship as rx_buf/rx_dma:
+ *  - The buffer is either valid for CPU access, else NULL
+ *  - If the buffer is valid, so is its DMA address
+ *
+ * This driver manages the dma address unless message->is_dma_mapped.
+ */
+static int
+ocspi_dma_map_xfer(struct ocspi *hw, struct spi_transfer *xfer)
+{
+	struct device	*dev = hw->master->dev.parent;
+
+	xfer->tx_dma = xfer->rx_dma = INVALID_DMA_ADDRESS;
+	if (xfer->tx_buf) {
+		/* tx_buf is a const void* where we need a void * for the dma
+		 * mapping */
+		void *nonconst_tx = (void *)xfer->tx_buf;
+
+		xfer->tx_dma = dma_map_single(dev,
+				nonconst_tx, xfer->len,
+				DMA_TO_DEVICE);
+		if (dma_mapping_error(dev, xfer->tx_dma))
+			return -ENOMEM;
+	}
+	if (xfer->rx_buf) {
+		xfer->rx_dma = dma_map_single(dev,
+				xfer->rx_buf, xfer->len,
+				DMA_FROM_DEVICE);
+		if (dma_mapping_error(dev, xfer->rx_dma)) {
+			if (xfer->tx_buf)
+				dma_unmap_single(dev,
+						xfer->tx_dma, xfer->len,
+						DMA_TO_DEVICE);
+			return -ENOMEM;
+		}
+	}
+	return 0;
+}
+
+static void ocspi_dma_unmap_xfer(struct ocspi *hw,
+				     struct spi_transfer *xfer)
+{
+	struct device	*dev = hw->master->dev.parent;
+
+	if (xfer->tx_dma != INVALID_DMA_ADDRESS)
+		dma_unmap_single(dev, xfer->tx_dma,
+				 xfer->len, DMA_TO_DEVICE);
+	if (xfer->rx_dma != INVALID_DMA_ADDRESS)
+		dma_unmap_single(dev, xfer->rx_dma,
+				 xfer->len, DMA_FROM_DEVICE);
+}
+
+
+static int ocspi_work_one_dma(struct ocspi *hw, struct spi_message *m, struct spi_transfer *t)
+{
+	struct spi_device *spi = m->spi;
+	const void *txbuf = t->tx_buf;
+	void *rxbuf = t->rx_buf;
+	u32 speed_hz = t->speed_hz ? : spi->max_speed_hz;
+	u8 bits_per_word = t->bits_per_word ? : spi->bits_per_word;
+	int ctrl = 0;
+	int len = t->len;
+	int wordlen;
+	unsigned int cs_delay = 100 + (NSEC_PER_SEC / 2) / spi->max_speed_hz;
+	int err = 0;
+
+	if (bits_per_word != 192)
+		return -EINVAL;
+
+	if (txbuf)
+		return -EINVAL; /* Only reads supported */
+
+	bits_per_word = 128; /* SPI part is only 128 bits. Followed by 64 bits counters */
+
+	ocspi_write(hw, OCSPI_REG_DIVIDER,
+			DIV_ROUND_UP(cpuinfo.clock_frequency, speed_hz * 2) - 1);
+	ctrl = OCSPI_CTRL_LEN(bits_per_word);
+	ctrl |= OCSPI_CTRL_Rx_NEG;
+	if (spi->mode & SPI_CPOL)
+		ctrl |= OCSPI_CTRL_CPOL;
+	if (spi->mode & SPI_CPHA)
+		ctrl ^= OCSPI_CTRL_Rx_NEG | OCSPI_CTRL_Tx_NEG;
+	if (spi->mode & SPI_LSB_FIRST)
+		ctrl |= OCSPI_CTRL_LSB;
+	ocspi_write(hw, OCSPI_REG_CTRL, ctrl);
+
+	ocspi_set_cs(hw, spi->chip_select, cs_delay);
+
+	/* Start DMA */
+	ocspi_write(hw, OCSPI_REG_DMA_ADDR, t->rx_dma);
+	ocspi_write(hw, OCSPI_REG_DMA_CNT, t->len / 24);
+	ocspi_write(hw, OCSPI_REG_DMA_EXECUTE, 1);
+
+	if (hw->polled_mode) {
+		/* TOOD: Make this interruptible */
+		err = 0;
+		while(ocspi_read(hw, OCSPI_REG_DMA_CURRENT_CNT) != 0);
+	} else {
+		err = wait_event_interruptible(hw->wait, !(ocspi_read(hw, OCSPI_REG_DMA_CURRENT_CNT) != 0));
+	}
+
+	if (!m->is_dma_mapped)
+		ocspi_dma_unmap_xfer(hw, t);
+
+	len = t->len;
+	while (len > 0) {
+		ocspi_fill_tx(hw, &txbuf, wordlen);
+		if (err)
+			return err;
+		ocspi_read_rx(hw, &rxbuf, wordlen);
+		len -= wordlen;
+		m->actual_length += wordlen;
+	}
+	return 0;
+}
+
 static void ocspi_work_one(struct ocspi *hw, struct spi_message *m)
 {
 	struct spi_device *spi = m->spi;
@@ -269,7 +388,11 @@ static void ocspi_work_one(struct ocspi *hw, struct spi_message *m)
 	}
 
 	list_for_each_entry (t, &m->transfers, transfer_list) {
-		err = ocspi_work_one_xfr(hw, m, t);
+		u8 bits_per_word = t->bits_per_word ? : spi->bits_per_word;
+		if (bits_per_word == 192)
+			err = ocspi_work_one_dma(hw, m, t);
+		else
+			err = ocspi_work_one_xfr(hw, m, t);
 		if (err)
 			goto out;
 		if (t->cs_change)
@@ -331,11 +454,26 @@ static int ocspi_transfer(struct spi_device *spi, struct spi_message *m)
 		return -EINVAL;
 
 	list_for_each_entry(t, &m->transfers, transfer_list) {
-		if (t->bits_per_word < 0 || t->bits_per_word > 128)
+		if ((t->bits_per_word < 0 || t->bits_per_word > 128) && t->bits_per_word != 192)
 			return -EINVAL;
 
 		if (t->len == 0)
 			return -EINVAL;
+
+		if (t->bits_per_word == 192) {
+			/*
+			 * DMA map early, for performance (empties dcache ASAP) and
+			 * better fault reporting.  This is a DMA-only driver.
+			 *
+			 * NOTE that if dma_unmap_single() ever starts to do work on
+			 * platforms supported by this driver, we would need to clean
+			 * up mappings for previously-mapped transfers.
+			 */
+			if (!m->is_dma_mapped) {
+				if (ocspi_dma_map_xfer(hw, t) < 0)
+					return -ENOMEM;
+			}
+		}
         }
 
 	/* This is not needed here. Can go in the worker when starting message */

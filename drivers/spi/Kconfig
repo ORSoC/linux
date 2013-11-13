@@ -233,6 +233,11 @@ config SPI_OCSPI
 	help
 	  Driver for SPI master core from OpenCores.org 
 
+config SPI_GEOPEBBLE
+	tristate "Geopebble ADC"
+	help
+	  Driver for Geopebble ADC controller
+
 config SPI_OMAP_UWIRE
 	tristate "OMAP1 MicroWire"
 	depends on ARCH_OMAP1
