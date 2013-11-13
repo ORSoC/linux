@@ -57,19 +57,6 @@
 
         i2c@a0000000 {
 		compatible = "opencores,i2c-ocores";
-		reg = <0xa0000000 0x8>;
-		reg-shift = <0>;        /* 8 bit registers */
-		interrupts = <14>;
-		clock-frequency = <400000>;
-		#address-cells = <1>;
-		#size-cells = <0>;
-		env_sensor@27 {	 /* U9 */
-			compatible = "honeywell,hih6130";
-			reg = <0x27>;
-		};
-        };
-        i2c@a1000000 {
-		compatible = "opencores,i2c-ocores";
 		reg = <0xa1000000 0x8>;
 		reg-shift = <0>;        /* 8 bit registers */
 		interrupts = <15>;
@@ -95,14 +82,6 @@
 		// interrupts = <7>; /* IRQ disabled to use polled mode */
 		#address-cells = <1>;
 		#size-cells = <0>;
-		adc@4 {
-			#address-cells = <1>;
-			#size-cells = <1>;
-			spi-max-frequency = <5000000>;	/* 1/10 of specified max (50ns). Not sure on board signal quality */
-			compatible = "spidev", "maxim,max11040k";
-			reg = <4>;
-			spi-cpol;
-		};
 		pga@0 {		/* U2 */
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -131,14 +110,7 @@
 			compatible = "spidev", "maxim,max9939";
 			reg = <3>;
 		};
-		oled@5 {
-			#address-cells = <1>;
-			#size-cells = <1>;
-			spi-max-frequency = <3300000>;
-			compatible = "spidev", "newhaven,nhd‐0216kzw‐ab5";
-			reg = <5>;
-			spi-cpol;
-		};
+		// Is this still on 6, or is it 5?
 		wifi@6 {
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -146,6 +118,21 @@
 			// Not sure what model the wifi module have
 			compatible = "spidev";
 			reg = <6>;
+		};
+        };
+        spi@b1000000 {
+		compatible = "opencores,spi";
+		reg = <0xb0000000 0x20>;
+		// interrupts = <7>; /* IRQ disabled to use polled mode */
+		#address-cells = <1>;
+		#size-cells = <0>;
+		adc@0 {
+			#address-cells = <1>;
+			#size-cells = <1>;
+			spi-max-frequency = <5000000>;	/* 1/10 of specified max (50ns). Not sure on board signal quality */
+			compatible = "spidev", "maxim,max11040k";
+			reg = <0>;
+			spi-cpol;
 		};
         };
 };
