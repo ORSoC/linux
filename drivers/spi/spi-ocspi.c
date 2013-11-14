@@ -402,7 +402,7 @@ static int __devinit ocspi_probe(struct platform_device *pdev)
 	master->bus_num = pdev->id;
 	if (master->bus_num == -1) {
 		/* Construct bus number based on low bits of base address */
-		master->bus_num = (memres->start >> 24) & 0x4;
+		master->bus_num = (memres->start >> 24) & 0x3;
 	}
 	master->num_chipselect = OCSPI_NUM_CHIPSELECTS;
 	master->setup = ocspi_setup;

@@ -120,12 +120,13 @@
 			reg = <6>;
 		};
         };
-        spi@b1000000 {
-		compatible = "opencores,spi";
-		reg = <0xb0000000 0x20>;
+        spiadc@b1000000 {
+		compatible = "opencores,spi-geopebble";
+		reg = <0xb1000000 0x40>;
 		// interrupts = <7>; /* IRQ disabled to use polled mode */
 		#address-cells = <1>;
 		#size-cells = <0>;
+		interrupts = <9>;
 		adc@0 {
 			#address-cells = <1>;
 			#size-cells = <1>;

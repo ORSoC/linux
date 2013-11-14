@@ -552,9 +552,12 @@ static int __devinit ocspi_probe(struct platform_device *pdev)
 	
 	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_LSB_FIRST;
 	master->bus_num = pdev->id;
+printk("bus_num = %d (pdev)\n", master->bus_num);
 	if (master->bus_num == -1) {
+printk("memres = %X\n", (unsigned)memres->start);
 		/* Construct bus number based on low bits of base address */
-		master->bus_num = (memres->start >> 24) & 0x4;
+		master->bus_num = (memres->start >> 24) & 0x3;
+printk("bus_num = %d (memres)\n", master->bus_num);
 	}
 	master->num_chipselect = OCSPI_NUM_CHIPSELECTS;
 	master->setup = ocspi_setup;
@@ -574,7 +577,7 @@ static int __devinit ocspi_probe(struct platform_device *pdev)
 	if (error)
 		goto out;
 
-	printk(KERN_INFO "OpenCores SPI controller (c) 2013 ORSoC AB\n");
+	printk(KERN_INFO "Geopebble SPI ADC controller (c) 2013 ORSoC AB\n");
 
 	return 0;
 
@@ -600,7 +603,7 @@ static int __devexit ocspi_remove(struct platform_device *pdev)
 
 static struct of_device_id ocspi_match[] = {
         {
-                .compatible = "opencores,spi",
+                .compatible = "opencores,spi-geopebble",
         },
         {},
 };
