@@ -108,6 +108,15 @@
 			compatible = "spidev";
 			reg = <6>;
 		};
+/* This does not work
+		sdc@7 {
+			spi-max-frequency = <33000000>;
+			// Not sure what model the wifi module have
+			compatible = "mmc-spi-slot";
+			reg = <7>;
+			voltage-ranges = <3300 3300>;
+		};
+*/
         };
         spiadc@b1000000 {
 		compatible = "opencores,spi-geopebble";
@@ -125,4 +134,12 @@
 			spi-cpol;
 		};
         };
+
+/* Not quite yet
+	adcirq@0xc0000000 {
+		compatible = "generic-uio";
+		reg = < 0xc0000000 0x4 >;
+		interrupts = <20>;
+	};
+*/
 };
