@@ -83,37 +83,26 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		pga@0 {		/* U2 */
-			#address-cells = <1>;
-			#size-cells = <1>;
 			spi-max-frequency = <5000000>;
 			compatible = "spidev", "maxim,max9939";
 			reg = <0>;
 		};
 		pga@1 {		/* U4 */
-			#address-cells = <1>;
-			#size-cells = <1>;
 			spi-max-frequency = <5000000>; 
 			compatible = "spidev", "maxim,max9939";
 			reg = <1>;
 		};
 		pga@2 {		/* U6 */
-			#address-cells = <1>;
-			#size-cells = <1>;
 			spi-max-frequency = <5000000>;
 			compatible = "spidev", "maxim,max9939";
 			reg = <2>;
 		};
 		pga@3 {		/* U8 */
-			#address-cells = <1>;
-			#size-cells = <1>;
 			spi-max-frequency = <5000000>;
 			compatible = "spidev", "maxim,max9939";
 			reg = <3>;
 		};
-		// Is this still on 6, or is it 5?
 		wifi@6 {
-			#address-cells = <1>;
-			#size-cells = <1>;
 			spi-max-frequency = <33000000>;
 			// Not sure what model the wifi module have
 			compatible = "spidev";
