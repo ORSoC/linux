@@ -13,6 +13,9 @@
 #include <linux/stringify.h>
 #include <linux/slab.h>
 
+#include <linux/of.h>
+#include <linux/of_platform.h>
+
 #define DRIVER_NAME "uio_pdrv"
 
 struct uio_platdata {
@@ -26,6 +29,19 @@ static int uio_pdrv_probe(struct platform_device *pdev)
 	struct uio_mem *uiomem;
 	int ret = -ENODEV;
 	int i;
+
+	if (!uioinfo) {
+		/* devicetree -- alloc uioinfo for one device */
+		uioinfo = kzalloc(sizeof(*uioinfo), GFP_KERNEL);
+		if (!uioinfo) {
+			ret = -ENOMEM;
+			dev_err(&pdev->dev, "unable to kmalloc\n");
+			goto err_uioinfo;
+		}
+		uioinfo->name = pdev->dev.of_node->name;
+		uioinfo->version = "devicetree";
+		uioinfo->irq = UIO_IRQ_NONE;
+	}
 
 	if (!uioinfo || !uioinfo->name || !uioinfo->version) {
 		dev_dbg(&pdev->dev, "%s: err_uioinfo\n", __func__);
@@ -94,12 +110,23 @@ static int uio_pdrv_remove(struct platform_device *pdev)
 	return 0;
 }
 
+#ifdef CONFIG_OF
+static const struct of_device_id uio_pdrv_of_match[] = {
+	{ .compatible = "uio_pdrv", },
+	{ },
+};
+MODULE_DEVICE_TABLE(of, uio_pdrv_of_match);
+#else
+# define uio_pdrv_of_match NULL
+#endif
+
 static struct platform_driver uio_pdrv = {
 	.probe = uio_pdrv_probe,
 	.remove = uio_pdrv_remove,
 	.driver = {
 		.name = DRIVER_NAME,
 		.owner = THIS_MODULE,
+		.of_match_table = uio_pdrv_of_match,
 	},
 };
 
