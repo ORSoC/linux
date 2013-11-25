@@ -313,20 +313,16 @@ static void ocspi_dma_unmap_xfer(struct ocspi *hw,
 static int ocspi_work_one_dma(struct ocspi *hw, struct spi_message *m, struct spi_transfer *t)
 {
 	struct spi_device *spi = m->spi;
-	const void *txbuf = t->tx_buf;
-	void *rxbuf = t->rx_buf;
 	u32 speed_hz = t->speed_hz ? : spi->max_speed_hz;
 	u8 bits_per_word = t->bits_per_word ? : spi->bits_per_word;
 	int ctrl = 0;
-	int len = t->len;
-	int wordlen;
 	unsigned int cs_delay = 100 + (NSEC_PER_SEC / 2) / spi->max_speed_hz;
 	int err = 0;
 
 	if (bits_per_word != 192)
 		return -EINVAL;
 
-	if (txbuf)
+	if (t->tx_buf)
 		return -EINVAL; /* Only reads supported */
 
 	bits_per_word = 128; /* SPI part is only 128 bits. Followed by 64 bits counters */
@@ -361,15 +357,8 @@ static int ocspi_work_one_dma(struct ocspi *hw, struct spi_message *m, struct sp
 	if (!m->is_dma_mapped)
 		ocspi_dma_unmap_xfer(hw, t);
 
-	len = t->len;
-	while (len > 0) {
-		ocspi_fill_tx(hw, &txbuf, wordlen);
-		if (err)
-			return err;
-		ocspi_read_rx(hw, &rxbuf, wordlen);
-		len -= wordlen;
-		m->actual_length += wordlen;
-	}
+	m->actual_length += t->len;
+
 	return 0;
 }
 
