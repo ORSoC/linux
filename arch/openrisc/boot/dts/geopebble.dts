@@ -135,11 +135,12 @@
 		};
         };
 
-/* Not quite yet
-	adcirq@0xc0000000 {
+
+	adcctrl@0xc0000000 {
 		compatible = "generic-uio";
-		reg = < 0xc0000000 0x4 >;
-		interrupts = <20>;
+		reg = < 0xc0000000 0x400 >;
+// Interrupt do not work. Triggers unexpectedly immeditely at start
+//		interrupts = <20>;
 	};
-*/
+
 };
