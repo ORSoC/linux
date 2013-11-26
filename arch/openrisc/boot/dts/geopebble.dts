@@ -139,8 +139,7 @@
 	adcctrl@0xc0000000 {
 		compatible = "generic-uio";
 		reg = < 0xc0000000 0x400 >;
-// Interrupt do not work. Triggers unexpectedly immeditely at start
-//		interrupts = <20>;
+		interrupts = <20>;
 	};
 
 };
