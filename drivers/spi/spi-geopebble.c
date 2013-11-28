@@ -225,7 +225,7 @@ static int ocspi_work_one_xfr(struct ocspi *hw, struct spi_message *m, struct sp
 	ocspi_write(hw, OCSPI_REG_DIVIDER,
 			DIV_ROUND_UP(cpuinfo.clock_frequency, speed_hz * 2) - 1);
 	ctrl = OCSPI_CTRL_LEN(bits_per_word);
-	ctrl |= OCSPI_CTRL_Rx_NEG;
+	ctrl |= OCSPI_CTRL_Tx_NEG;
 	if (spi->mode & SPI_CPOL)
 		ctrl |= OCSPI_CTRL_CPOL;
 	if (spi->mode & SPI_CPHA)
@@ -329,7 +329,7 @@ static int ocspi_work_one_dma(struct ocspi *hw, struct spi_message *m, struct sp
 	ocspi_write(hw, OCSPI_REG_DIVIDER,
 			DIV_ROUND_UP(cpuinfo.clock_frequency, speed_hz * 2) - 1);
 	ctrl = OCSPI_CTRL_LEN(bits_per_word);
-	ctrl |= OCSPI_CTRL_Rx_NEG;
+	ctrl |= OCSPI_CTRL_Tx_NEG;
 	if (spi->mode & SPI_CPOL)
 		ctrl |= OCSPI_CTRL_CPOL;
 	if (spi->mode & SPI_CPHA)
