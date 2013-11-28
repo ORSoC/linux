@@ -108,26 +108,16 @@
 			compatible = "spidev";
 			reg = <6>;
 		};
-/* This does not work
-		sdc@7 {
-			spi-max-frequency = <33000000>;
-			// Not sure what model the wifi module have
-			compatible = "mmc-spi-slot";
-			reg = <7>;
-			voltage-ranges = <3300 3300>;
-		};
-*/
         };
         spiadc@b1000000 {
-		compatible = "opencores,spi-geopebble";
+		//compatible = "opencores,spi-geopebble";
+		compatible = "opencores,spi";
 		reg = <0xb1000000 0x40>;
 		// interrupts = <7>; /* IRQ disabled to use polled mode */
 		#address-cells = <1>;
 		#size-cells = <0>;
-		interrupts = <9>;
+		//interrupts = <9>;
 		adc@0 {
-			#address-cells = <1>;
-			#size-cells = <1>;
 			spi-max-frequency = <5000000>;	/* 1/10 of specified max (50ns). Not sure on board signal quality */
 			compatible = "spidev", "maxim,max11040k";
 			reg = <0>;
@@ -135,6 +125,20 @@
 		};
         };
 
+
+	spisdc@b2000000 {
+		compatible = "opencores,spi";
+		reg = <0xb2000000 0x20>;
+		// interrupts = <10>; /* IRQ disabled to use polled mode */
+		#address-cells = <1>;
+		#size-cells = <0>;
+		sdc@0 {
+			spi-max-frequency = <5000000>;	/* 1/10 of specified max (50ns). Not sure on board signal quality */
+			compatible = "spidev", "mmc-spi-slot";
+			reg = <0>;
+			voltage-ranges = <3300 3300>;
+		};
+	};
 
 	adcctrl@0xc0000000 {
 		compatible = "generic-uio";
