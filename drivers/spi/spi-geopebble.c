@@ -70,6 +70,7 @@ struct ocspi {
 	/* Hardware */
 	void __iomem		*base;
 	int			current_cs;
+	int			cs_inverted;
 
 	/* limits */
 	unsigned int		max_speed;
@@ -99,23 +100,21 @@ static irqreturn_t ocspi_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+static void ocspi_update_ss(struct ocspi *hw)
+{
+	int ss = hw->current_cs >= 0 ? (1 << hw->current_cs) : 0;
+	ss ^= hw->cs_inverted;
+	ocspi_write(hw, OCSPI_REG_SS, ss);
+}
+
 static void ocspi_set_cs(struct ocspi *hw, int cs, int cs_delay)
 {
 	if (cs && hw->current_cs == cs)
 		return;
 
-	/* deassert any old CS */
-	if (cs < 0 || hw->current_cs >= 0) {
-		ocspi_write(hw, OCSPI_REG_SS, 0);
-		ndelay(cs_delay);
-	}
-
-	/* assert CS */
-	if (cs >= 0) {
-		ocspi_write(hw, OCSPI_REG_SS, 1<<cs);
-		ndelay(cs_delay);
-	}
 	hw->current_cs = cs;
+	ocspi_update_ss(hw);
+	ndelay(cs_delay);
 }
 
 static void ocspi_clear_cs(struct ocspi *hw, int cs_delay)
@@ -539,7 +538,7 @@ static int __devinit ocspi_probe(struct platform_device *pdev)
 		hw->polled_mode = 1;
 	}
 	
-	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_LSB_FIRST;
+	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_LSB_FIRST | SPI_CS_HIGH;
 	master->bus_num = pdev->id;
 printk("bus_num = %d (pdev)\n", master->bus_num);
 	if (master->bus_num == -1) {
