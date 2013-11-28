@@ -134,7 +134,7 @@
 		#size-cells = <0>;
 		sdc@0 {
 			spi-max-frequency = <5000000>;	/* 1/10 of specified max (50ns). Not sure on board signal quality */
-			compatible = "spidev", "mmc-spi-slot";
+			compatible = "mmc-spi-slot";
 			reg = <0>;
 			voltage-ranges = <3300 3300>;
 		};
