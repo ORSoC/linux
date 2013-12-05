@@ -336,6 +336,8 @@ static int ocspi_work_one_dma(struct ocspi *hw, struct spi_message *m, struct sp
 		ctrl ^= OCSPI_CTRL_Rx_NEG | OCSPI_CTRL_Tx_NEG;
 	if (spi->mode & SPI_LSB_FIRST)
 		ctrl |= OCSPI_CTRL_LSB;
+	ctrl |= OCSPI_CTRL_IE;	/* interrupt on completion */
+	ctrl |= OCSPI_CTRL_ASS;
 	ocspi_write(hw, OCSPI_REG_CTRL, ctrl);
 
 	ocspi_set_cs(hw, spi->chip_select, cs_delay);
