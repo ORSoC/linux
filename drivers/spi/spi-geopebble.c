@@ -268,7 +268,6 @@ ocspi_dma_map_xfer(struct ocspi *hw, struct spi_transfer *xfer)
 {
 	struct device	*dev = hw->master->dev.parent;
 
-	xfer->tx_dma = xfer->rx_dma = INVALID_DMA_ADDRESS;
 	if (xfer->tx_buf) {
 		/* tx_buf is a const void* where we need a void * for the dma
 		 * mapping */
@@ -439,16 +438,24 @@ static int ocspi_transfer(struct spi_device *spi, struct spi_message *m)
 	struct ocspi *hw = spi_master_get_devdata(spi->master);
 	struct spi_transfer *t = NULL;
 	unsigned long flags;
+	int err = 0;
 
 	if (list_empty(&m->transfers) || !m->complete)
 		return -EINVAL;
 
+	if (!m->is_dma_mapped)
+		list_for_each_entry(t, &m->transfers, transfer_list)
+			t->tx_dma = t->rx_dma = INVALID_DMA_ADDRESS;
 	list_for_each_entry(t, &m->transfers, transfer_list) {
-		if ((t->bits_per_word < 0 || t->bits_per_word > 128) && t->bits_per_word != 192)
-			return -EINVAL;
+		if ((t->bits_per_word < 0 || t->bits_per_word > 128) && t->bits_per_word != 192) {
+			err = -EINVAL;
+			goto fail;
+		}
 
-		if (t->len == 0)
-			return -EINVAL;
+		if (t->len == 0) {
+			err = -EINVAL;
+			goto fail;
+		}
 
 		if (t->bits_per_word == 192) {
 			/*
@@ -460,8 +467,9 @@ static int ocspi_transfer(struct spi_device *spi, struct spi_message *m)
 			 * up mappings for previously-mapped transfers.
 			 */
 			if (!m->is_dma_mapped) {
-				if (ocspi_dma_map_xfer(hw, t) < 0)
-					return -ENOMEM;
+				err = ocspi_dma_map_xfer(hw, t);
+				if (err < 0)
+					goto fail;
 			}
 		}
         }
@@ -476,6 +484,11 @@ static int ocspi_transfer(struct spi_device *spi, struct spi_message *m)
 	spin_unlock_irqrestore(&hw->lock, flags);
 
 	return 0;
+
+fail:
+	list_for_each_entry(t, &m->transfers, transfer_list)
+		ocspi_dma_unmap_xfer(hw, t);
+	return err;
 }
 
 static int __devinit ocspi_probe(struct platform_device *pdev)
