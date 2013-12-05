@@ -437,13 +437,15 @@ spidev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		}
 		break;
 	case SPI_IOC_WR_BUFFER_SIZE:
-		if (spidev->users > 1) {
-			retval = EBUSY;
-			break;
-		}
 		retval = __get_user(tmp, (__u32 __user *)arg);
 		if (retval == 0) {
-			u8 *buffer = kmalloc(spidev->bufsiz, GFP_KERNEL);
+			u8 *buffer;
+			if (spidev->users > 1) {
+				printk("ERROR SPI in use by %d users\n", spidev->users);
+				retval = EBUSY;
+				break;
+			}
+			buffer = kmalloc(tmp, GFP_KERNEL);
 			if (!buffer) {
 				retval = ENOMEM;
 				break;
