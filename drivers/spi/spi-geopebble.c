@@ -540,12 +540,9 @@ static int __devinit ocspi_probe(struct platform_device *pdev)
 	
 	master->mode_bits = SPI_CPOL | SPI_CPHA | SPI_LSB_FIRST | SPI_CS_HIGH;
 	master->bus_num = pdev->id;
-printk("bus_num = %d (pdev)\n", master->bus_num);
 	if (master->bus_num == -1) {
-printk("memres = %X\n", (unsigned)memres->start);
 		/* Construct bus number based on low bits of base address */
 		master->bus_num = (memres->start >> 24) & 0x3;
-printk("bus_num = %d (memres)\n", master->bus_num);
 	}
 	master->num_chipselect = OCSPI_NUM_CHIPSELECTS;
 	master->setup = ocspi_setup;
