@@ -309,6 +309,18 @@ static void ocspi_dma_unmap_xfer(struct ocspi *hw,
 }
 
 
+static int ocspi_wait_dma(struct ocspi *hw)
+{
+	int err = 0;
+	if (hw->polled_mode) {
+		/* TODO: Make this interruptible */
+		while(ocspi_read(hw, OCSPI_REG_DMA_CURRENT_CNT) != 0);
+	} else {
+		err = wait_event_interruptible(hw->wait, !(ocspi_read(hw, OCSPI_REG_DMA_CURRENT_CNT) != 0));
+	}
+	return err;
+}
+
 static int ocspi_work_one_dma(struct ocspi *hw, struct spi_message *m, struct spi_transfer *t)
 {
 	struct spi_device *spi = m->spi;
@@ -342,21 +354,18 @@ static int ocspi_work_one_dma(struct ocspi *hw, struct spi_message *m, struct sp
 
 	ocspi_set_cs(hw, spi->chip_select, cs_delay);
 
+	if (hw->polled_mode) {
+		/* TODO: Make this interruptible */
+		err = 0;
+		while(ocspi_read(hw, OCSPI_REG_DMA_CNT) != 0);
+	} else {
+		err = wait_event_interruptible(hw->wait, !(ocspi_read(hw, OCSPI_REG_DMA_CNT) != 0));
+	}
+
 	/* Start DMA */
 	ocspi_write(hw, OCSPI_REG_DMA_ADDR, t->rx_dma);
 	ocspi_write(hw, OCSPI_REG_DMA_CNT, t->len / 24);
 	ocspi_write(hw, OCSPI_REG_DMA_EXECUTE, 1);
-
-	if (hw->polled_mode) {
-		/* TOOD: Make this interruptible */
-		err = 0;
-		while(ocspi_read(hw, OCSPI_REG_DMA_CURRENT_CNT) != 0);
-	} else {
-		err = wait_event_interruptible(hw->wait, !(ocspi_read(hw, OCSPI_REG_DMA_CURRENT_CNT) != 0));
-	}
-
-	if (!m->is_dma_mapped)
-		ocspi_dma_unmap_xfer(hw, t);
 
 	m->actual_length += t->len;
 
@@ -379,16 +388,26 @@ static void ocspi_work_one(struct ocspi *hw, struct spi_message *m)
 
 	list_for_each_entry (t, &m->transfers, transfer_list) {
 		u8 bits_per_word = t->bits_per_word ? : spi->bits_per_word;
-		if (bits_per_word == 192)
+		if (bits_per_word == 192) {
 			err = ocspi_work_one_dma(hw, m, t);
-		else
+		} else {
+			ocspi_wait_dma(hw);
 			err = ocspi_work_one_xfr(hw, m, t);
+		}
 		if (err)
 			goto out;
-		if (t->cs_change)
+		if (t->cs_change) {
+			ocspi_wait_dma(hw);
 			ocspi_clear_cs(hw, cs_delay);
+		}
 	}
 out:
+	ocspi_wait_dma(hw);
+	if (!m->is_dma_mapped) {
+		list_for_each_entry (t, &m->transfers, transfer_list) {
+			ocspi_dma_unmap_xfer(hw, t);
+		}
+	}
 	m->status = err;
 	m->complete(m->context);
 	ocspi_clear_cs(hw, cs_delay);
@@ -449,6 +468,9 @@ static int ocspi_transfer(struct spi_device *spi, struct spi_message *m)
 
 		if (t->len == 0)
 			return -EINVAL;
+
+		if (!m->is_dma_mapped)
+			t->tx_dma = t->rx_dma = INVALID_DMA_ADDRESS;
 
 		if (t->bits_per_word == 192) {
 			/*
