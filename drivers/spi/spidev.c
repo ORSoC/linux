@@ -83,6 +83,7 @@ struct spidev_data {
 	struct mutex		buf_lock;
 	unsigned		users;
 	u8			*buffer;
+	unsigned		bufsiz;
 };
 
 static LIST_HEAD(device_list);
@@ -165,11 +166,11 @@ spidev_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
 	struct spidev_data	*spidev;
 	ssize_t			status = 0;
 
-	/* chipselect only toggles at start or end of operation */
-	if (count > bufsiz)
-		return -EMSGSIZE;
-
 	spidev = filp->private_data;
+
+	/* chipselect only toggles at start or end of operation */
+	if (count > spidev->bufsiz)
+		return -EMSGSIZE;
 
 	mutex_lock(&spidev->buf_lock);
 	status = spidev_sync_read(spidev, count);
@@ -196,11 +197,11 @@ spidev_write(struct file *filp, const char __user *buf,
 	ssize_t			status = 0;
 	unsigned long		missing;
 
-	/* chipselect only toggles at start or end of operation */
-	if (count > bufsiz)
-		return -EMSGSIZE;
-
 	spidev = filp->private_data;
+
+	/* chipselect only toggles at start or end of operation */
+	if (count > spidev->bufsiz)
+		return -EMSGSIZE;
 
 	mutex_lock(&spidev->buf_lock);
 	missing = copy_from_user(spidev->buffer, buf, count);
@@ -241,7 +242,7 @@ static int spidev_message(struct spidev_data *spidev,
 		k_tmp->len = u_tmp->len;
 
 		total += k_tmp->len;
-		if (total > bufsiz) {
+		if (total > spidev->bufsiz) {
 			status = -EMSGSIZE;
 			goto done;
 		}
@@ -368,6 +369,10 @@ spidev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		retval = __put_user(spi->max_speed_hz, (__u32 __user *)arg);
 		break;
 
+	case SPI_IOC_RD_BUFFER_SIZE:
+		retval = __put_user(spidev->bufsiz, (__u32 __user *)arg);
+		break;
+
 	/* write requests */
 	case SPI_IOC_WR_MODE:
 		retval = __get_user(tmp, (u8 __user *)arg);
@@ -431,7 +436,23 @@ spidev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				dev_dbg(&spi->dev, "%d Hz (max)\n", tmp);
 		}
 		break;
-
+	case SPI_IOC_WR_BUFFER_SIZE:
+		if (spidev->users > 1) {
+			retval = EBUSY;
+			break;
+		}
+		retval = __get_user(tmp, (__u32 __user *)arg);
+		if (retval == 0) {
+			u8 *buffer = kmalloc(spidev->bufsiz, GFP_KERNEL);
+			if (!buffer) {
+				retval = ENOMEM;
+				break;
+			}
+			kfree(spidev->buffer);
+			spidev->buffer = buffer;
+			spidev->bufsiz = tmp;
+		}
+		break;
 	default:
 		/* segmented and/or full-duplex I/O request */
 		if (_IOC_NR(cmd) != _IOC_NR(SPI_IOC_MESSAGE(0))
@@ -497,7 +518,8 @@ static int spidev_open(struct inode *inode, struct file *filp)
 	}
 	if (status == 0) {
 		if (!spidev->buffer) {
-			spidev->buffer = kmalloc(bufsiz, GFP_KERNEL);
+			spidev->bufsiz = bufsiz;
+			spidev->buffer = kmalloc(spidev->bufsiz, GFP_KERNEL);
 			if (!spidev->buffer) {
 				dev_dbg(&spidev->spi->dev, "open/ENOMEM\n");
 				status = -ENOMEM;
@@ -583,6 +605,7 @@ static int __devinit spidev_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	/* Initialize the driver data */
+	spidev->bufsiz = bufsiz;
 	spidev->spi = spi;
 	spin_lock_init(&spidev->spi_lock);
 	mutex_init(&spidev->buf_lock);

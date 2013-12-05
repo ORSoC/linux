@@ -126,6 +126,8 @@ struct spi_ioc_transfer {
 #define SPI_IOC_RD_MAX_SPEED_HZ		_IOR(SPI_IOC_MAGIC, 4, __u32)
 #define SPI_IOC_WR_MAX_SPEED_HZ		_IOW(SPI_IOC_MAGIC, 4, __u32)
 
-
+/* Buffer size */
+#define SPI_IOC_RD_BUFFER_SIZE		_IOR(SPI_IOC_MAGIC, 5, __u32)
+#define SPI_IOC_WR_BUFFER_SIZE		_IOW(SPI_IOC_MAGIC, 5, __u32)
 
 #endif /* SPIDEV_H */
